@@ -16,13 +16,27 @@ interface ProjectState {
   endTime: number;
   aspectRatio: "9:16" | "1:1" | "16:9";
   subtitlesEnabled: boolean;
-  subtitleStyle: "karaoke" | "classic";
+  subtitleStyle: "bold_tiktok" | "neon_yellow" | "minimal_clean";
+  videoFilter: "cinema_intense" | "vibrant_social" | "bw_deep" | "none";
   outputFormat: "mp4" | "mp3" | "mkv";
   jobId: string | null;
   jobStatus: "idle" | "processing" | "completed" | "error";
   jobProgress: number;
   outputUrl: string | null;
   errorMessage: string | null;
+}
+
+const SUBTITLE_STYLE_LABELS: Record<ProjectState["subtitleStyle"], string> = {
+  bold_tiktok: "Bold TikTok",
+  neon_yellow: "Neon Yellow",
+  minimal_clean: "Minimal Clean",
+}
+
+const VIDEO_FILTER_LABELS: Record<ProjectState["videoFilter"], string> = {
+  cinema_intense: "Cinéma Intense",
+  vibrant_social: "Vibrant Social",
+  bw_deep: "Noir & Blanc Profond",
+  none: "Aucun",
 }
 
 interface ExportStepProps extends ProjectState {
@@ -39,6 +53,7 @@ export function ExportStep(props: ExportStepProps) {
     aspectRatio,
     subtitlesEnabled,
     subtitleStyle,
+    videoFilter,
     outputFormat,
     jobStatus,
     jobProgress,
@@ -78,8 +93,12 @@ export function ExportStep(props: ExportStepProps) {
             <div>
               <span className="text-muted-foreground">Sous-titres: </span>
               <span className="font-medium">
-                {subtitlesEnabled ? `Oui (${subtitleStyle})` : "Non"}
+                {subtitlesEnabled ? `Oui (${SUBTITLE_STYLE_LABELS[subtitleStyle]})` : "Non"}
               </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Filtre: </span>
+              <span className="font-medium">{VIDEO_FILTER_LABELS[videoFilter]}</span>
             </div>
           </div>
 

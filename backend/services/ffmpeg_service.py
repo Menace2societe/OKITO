@@ -12,6 +12,19 @@ ASPECT_RATIOS = {
     "16:9": "scale=1920:-2,crop=1920:1080"
 }
 
+# Dynamic colour-grade filter chains selected from the frontend.
+VIDEO_FILTERS = {
+    "cinema_intense": (
+        "eq=contrast=1.25:brightness=-0.02:saturation=1.35,"
+        "colorbalance=rs=0.08:gs=-0.02:bs=-0.08:rm=0.05:bm=-0.05"
+    ),
+    "vibrant_social": "eq=contrast=1.15:brightness=0.00:saturation=1.40",
+    "bw_deep": "hue=s=0,eq=contrast=1.30:brightness=-0.03",
+    "none": None,
+}
+
+DEFAULT_VIDEO_FILTER = "cinema_intense"
+
 
 def _find_ffmpeg() -> str:
     """Return the ffmpeg binary path, or raise if not found."""
@@ -131,17 +144,18 @@ def process_video(
     end_time: float,
     aspect_ratio: str,
     ass_path: Optional[str] = None,
+    video_filter: str = DEFAULT_VIDEO_FILTER,
 ) -> str:
-    """Trim, crop, optionally burn subtitles, and encode the output video."""
+    """Trim, crop, optionally colour-grade, burn subtitles, and encode."""
     abs_input = os.path.abspath(input_path)
     abs_output = os.path.abspath(output_path)
 
-    # Build video filter chain
+    # Build video filter chain: framing first, then optional colour grade.
     vf_parts = [ASPECT_RATIOS.get(aspect_ratio, ASPECT_RATIOS["16:9"])]
 
-    # Cinema-grade visual enhancement (Teal & Orange look)
-    vf_parts.append("eq=contrast=1.25:brightness=-0.02:saturation=1.35")
-    vf_parts.append("colorbalance=rs=0.08:gs=-0.02:bs=-0.08:rm=0.05:bm=-0.05")
+    filter_chain = VIDEO_FILTERS.get(video_filter, VIDEO_FILTERS[DEFAULT_VIDEO_FILTER])
+    if filter_chain:
+        vf_parts.append(filter_chain)
 
     if ass_path:
         rel_ass = _ass_path_for_ffmpeg(os.path.abspath(ass_path))

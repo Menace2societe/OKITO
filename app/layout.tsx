@@ -5,7 +5,7 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "OKITO — Video Processing",
+  title: "ClipFlow — Video Processing",
   description: "App for importing, trimming, subtitling, and exporting videos.",
 }
 

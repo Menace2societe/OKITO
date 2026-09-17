@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.config import MEDIA_DIR
 from backend.routes import upload, download_url, process, status, files
 
-app = FastAPI(title="OKITO API", version="1.0.0")
+app = FastAPI(title="ClipFlow API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

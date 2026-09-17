@@ -20,7 +20,8 @@ interface ProjectState {
   endTime: number;
   aspectRatio: "9:16" | "1:1" | "16:9";
   subtitlesEnabled: boolean;
-  subtitleStyle: "karaoke" | "classic";
+  subtitleStyle: "bold_tiktok" | "neon_yellow" | "minimal_clean";
+  videoFilter: "cinema_intense" | "vibrant_social" | "bw_deep" | "none";
   outputFormat: "mp4" | "mp3" | "mkv";
   jobId: string | null;
   jobStatus: "idle" | "processing" | "completed" | "error";
@@ -48,7 +49,8 @@ export default function StepWizard() {
     endTime: 0,
     aspectRatio: "9:16",
     subtitlesEnabled: false,
-    subtitleStyle: "karaoke",
+    subtitleStyle: "bold_tiktok",
+    videoFilter: "cinema_intense",
     outputFormat: "mp4",
     jobId: null,
     jobStatus: "idle",
@@ -76,7 +78,8 @@ export default function StepWizard() {
       endTime: 0,
       aspectRatio: "9:16",
       subtitlesEnabled: false,
-      subtitleStyle: "karaoke",
+      subtitleStyle: "bold_tiktok",
+      videoFilter: "cinema_intense",
       outputFormat: "mp4",
       jobId: null,
       jobStatus: "idle",
@@ -113,7 +116,8 @@ export default function StepWizard() {
           end_time: state.endTime,
           aspect_ratio: state.aspectRatio,
           subtitles_enabled: state.subtitlesEnabled,
-          subtitle_style: state.subtitleStyle,
+          style_preset: state.subtitleStyle,
+          video_filter: state.videoFilter,
           output_format: state.outputFormat,
         }),
       })
@@ -147,7 +151,7 @@ export default function StepWizard() {
           } else if (statusData.status === "failed") {
             if (pollRef.current) clearInterval(pollRef.current)
             const errMsg = statusData.error || "Erreur inconnue lors du traitement"
-            console.error("[OKITO] Traitement échoué :", errMsg)
+            console.error("[ClipFlow] Traitement échoué :", errMsg)
             updateState({ jobStatus: "error", errorMessage: errMsg })
           }
         } catch {
@@ -168,7 +172,7 @@ export default function StepWizard() {
     if (state.outputUrl) {
       const a = document.createElement("a")
       a.href = state.outputUrl
-      a.download = `okito_output.${state.outputFormat}`
+      a.download = `clipflow_output.${state.outputFormat}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -248,13 +252,18 @@ export default function StepWizard() {
             startTime={state.startTime}
             endTime={state.endTime}
             aspectRatio={state.aspectRatio}
+            videoFilter={state.videoFilter}
             onTrimChange={(start, end) => updateState({ startTime: start, endTime: end })}
             onAspectRatioChange={(ratio) => updateState({ aspectRatio: ratio })}
+            onVideoFilterChange={(filter) => updateState({ videoFilter: filter })}
           />
         )}
         
         {currentStep === 2 && (
           <SubtitleStep
+            fileUrl={state.fileUrl}
+            startTime={state.startTime}
+            endTime={state.endTime}
             subtitlesEnabled={state.subtitlesEnabled}
             subtitleStyle={state.subtitleStyle}
             onToggle={(enabled) => updateState({ subtitlesEnabled: enabled })}

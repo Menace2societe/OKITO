@@ -22,7 +22,9 @@ class ProcessRequest(BaseModel):
     end_time: float
     aspect_ratio: str
     subtitles_enabled: bool
-    subtitle_style: str
+    subtitle_style: str = "bold_tiktok"
+    style_preset: str = "bold_tiktok"
+    video_filter: str = "cinema_intense"
     output_format: str
 
 
@@ -68,7 +70,9 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
             ass_path = os.path.abspath(
                 os.path.join(MEDIA_DIR, f"{job_id}.ass")
             )
-            subtitle_service.generate_ass(words, ass_path, request.aspect_ratio)
+            subtitle_service.generate_ass(
+                words, ass_path, request.aspect_ratio, request.style_preset
+            )
             logger.info("[process] Sous-titres générés : %s", ass_path)
             print(f"[process] Sous-titres générés : {ass_path}")
 
@@ -93,6 +97,7 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
             end_time=request.end_time,
             aspect_ratio=request.aspect_ratio,
             ass_path=ass_path,
+            video_filter=request.video_filter,
         )
 
         # ── 4. Success ──────────────────────────────────────────────────
