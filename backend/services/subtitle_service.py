@@ -45,6 +45,14 @@ ASS_STYLE_PRESETS: Dict[str, Dict[str, Any]] = {
 
 DEFAULT_STYLE_PRESET = "bold_tiktok"
 
+# Max words shown per subtitle line — keep punchlines short for 9:16.
+MAX_WORDS_PER_LINE = 4
+
+
+def _ends_sentence(text: str) -> bool:
+    """True when a word closes a sentence, so we can break the line early."""
+    return text.strip().endswith((".", "!", "?", "…", "..."))
+
 
 def _build_style_line(style_preset: str) -> str:
     """Build the ASS [V4+ Styles] line for the requested preset."""
@@ -109,7 +117,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         current_line.append(word)
         line_end_time = word["end"]
 
-        if len(current_line) >= 6 or i == len(words) - 1:
+        if (
+            len(current_line) >= MAX_WORDS_PER_LINE
+            or _ends_sentence(word["text"])
+            or i == len(words) - 1
+        ):
             start_str = format_time(line_start_time)
             end_str = format_time(line_end_time)
 
