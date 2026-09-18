@@ -39,6 +39,8 @@ const STEPS = [
   { id: 3, label: "Export", icon: Download },
 ]
 
+const PROCESS_TIMEOUT_MS = 5 * 60 * 1000
+
 export default function StepWizard() {
   const [currentStep, setCurrentStep] = React.useState(0)
   
@@ -111,10 +113,18 @@ export default function StepWizard() {
   }, [])
 
   const handleProcess = async () => {
+    if (pollRef.current) clearInterval(pollRef.current)
     updateState({ jobStatus: "processing", jobProgress: 0, errorMessage: null })
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => {
+      controller.abort()
+    }, PROCESS_TIMEOUT_MS)
+
     try {
       const res = await fetch("/api/process", {
         method: "POST",
+        signal: controller.signal,
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_id: state.fileId,
@@ -128,17 +138,21 @@ export default function StepWizard() {
           output_format: state.outputFormat,
         }),
       })
+      window.clearTimeout(timeoutId)
 
-      if (!res.ok) {
-        let message = "Erreur lors du lancement du traitement"
-        try {
-          const err = await res.json()
-          message = err.detail || message
-        } catch { /* non-JSON response */ }
-        throw new Error(message)
+      const contentType = res.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        const rawText = await res.text()
+        console.error("[ClipFlow Export] Réponse brute non-JSON :", rawText)
+        throw new Error("Le serveur a renvoyé une réponse invalide pendant l'export.")
       }
 
       const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.detail || "Erreur lors du lancement du traitement")
+      }
+
       updateState({ jobId: data.job_id })
 
       // Poll for status
@@ -170,7 +184,13 @@ export default function StepWizard() {
         }
       }, 2000)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Erreur inconnue"
+      window.clearTimeout(timeoutId)
+      const msg =
+        e instanceof DOMException && e.name === "AbortError"
+          ? "Le traitement FFmpeg a dépassé le délai imparti."
+          : e instanceof Error
+            ? e.message
+            : "Erreur inconnue"
       updateState({ jobStatus: "error", errorMessage: msg })
     }
   }
