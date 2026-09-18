@@ -1,9 +1,10 @@
 import os
+import re
 import uuid
 import glob
 import logging
 import traceback
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from backend.config import MEDIA_DIR
@@ -25,7 +26,16 @@ class ProcessRequest(BaseModel):
     subtitle_style: str = "bold_tiktok"
     style_preset: str = "bold_tiktok"
     video_filter: str = "cinema_intense"
+    # Optional manually edited / pasted subtitles: a raw string or a list of
+    # {"text", "start", "end"} segments. When set, Whisper is skipped.
+    custom_subtitles: Optional[Union[str, List[Any]]] = None
     output_format: str
+
+
+class TranscribeRequest(BaseModel):
+    file_id: str
+    start_time: float
+    end_time: float
 
 
 def process_video_task(job_id: str, request: ProcessRequest) -> None:
@@ -50,35 +60,95 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
         # ── 2. Subtitles (optional) ─────────────────────────────────────
         ass_path: Optional[str] = None
         if request.subtitles_enabled:
-            jobs[job_id]["progress"] = 10
-            logger.info("[process] Extraction audio pour Whisper...")
-            print("[process] Extraction audio pour Whisper...")
-
-            audio_path = os.path.abspath(
-                os.path.join(MEDIA_DIR, f"{job_id}_audio.wav")
-            )
-            ffmpeg_service.extract_audio(
-                input_path, audio_path, request.start_time, request.end_time
-            )
-
-            jobs[job_id]["progress"] = 30
-            logger.info("[process] Transcription Whisper...")
-            print("[process] Transcription Whisper...")
-            words = whisper_service.transcribe(audio_path)
-
-            jobs[job_id]["progress"] = 60
             ass_path = os.path.abspath(
                 os.path.join(MEDIA_DIR, f"{job_id}.ass")
             )
-            subtitle_service.generate_ass(
-                words, ass_path, request.aspect_ratio, request.style_preset
-            )
-            logger.info("[process] Sous-titres générés : %s", ass_path)
-            print(f"[process] Sous-titres générés : {ass_path}")
 
-            # Clean up temp audio
-            if os.path.exists(audio_path):
-                os.remove(audio_path)
+            if request.custom_subtitles:
+                # 2b. Custom text — bypass Whisper entirely ---------------
+                jobs[job_id]["progress"] = 40
+                logger.info(
+                    "[process] 2/3 — Sous-titres personnalisés fournis : "
+                    "transcription Whisper ignorée."
+                )
+                print(
+                    "[process] 2/3 — Sous-titres personnalisés fournis : "
+                    "transcription Whisper ignorée."
+                )
+                line_count = subtitle_service.generate_ass_from_custom(
+                    custom_subtitles=request.custom_subtitles,
+                    output_path=ass_path,
+                    aspect_ratio=request.aspect_ratio,
+                    style_preset=request.style_preset,
+                    start_time=request.start_time,
+                    end_time=request.end_time,
+                )
+            else:
+                # 2a. Audio extraction ---------------------------------
+                jobs[job_id]["progress"] = 10
+                logger.info(
+                    "[process] 1/3 — Extraction de l'audio (%.2fs → %.2fs) depuis %s",
+                    request.start_time, request.end_time, input_path,
+                )
+                print(
+                    f"[process] 1/3 — Extraction de l'audio "
+                    f"({request.start_time:.2f}s → {request.end_time:.2f}s)"
+                )
+
+                audio_path = os.path.abspath(
+                    os.path.join(MEDIA_DIR, f"{job_id}_audio.wav")
+                )
+                ffmpeg_service.extract_audio(
+                    input_path, audio_path, request.start_time, request.end_time
+                )
+
+                # Sanity check: the extracted WAV must exist, be non-empty and
+                # report a positive duration, otherwise Whisper gets garbage.
+                audio_size = os.path.getsize(audio_path) if os.path.exists(audio_path) else 0
+                audio_duration = ffmpeg_service.get_duration(audio_path) if audio_size else 0.0
+                logger.info(
+                    "[process] Audio extrait : %s (%d octets, %.2fs)",
+                    audio_path, audio_size, audio_duration,
+                )
+                print(
+                    f"[process] Audio extrait : {audio_path} "
+                    f"({audio_size} octets, {audio_duration:.2f}s)"
+                )
+                if audio_size == 0 or audio_duration <= 0:
+                    logger.warning(
+                        "[process] Audio extrait vide ou illisible : %s", audio_path
+                    )
+                    print(f"[process] [WARN] Audio extrait vide ou illisible : {audio_path}")
+
+                # 2b. Whisper transcription ----------------------------
+                jobs[job_id]["progress"] = 30
+                logger.info("[process] 2/3 — Transcription Whisper...")
+                print("[process] 2/3 — Transcription Whisper...")
+                words = whisper_service.transcribe(audio_path)
+                logger.info("[process] Whisper a retourné %d mot(s).", len(words))
+                print(f"[process] Whisper a retourné {len(words)} mot(s).")
+                if not words:
+                    logger.warning("[WARN] Aucun texte détecté par Whisper pour cette vidéo.")
+                    print("[WARN] Aucun texte détecté par Whisper pour cette vidéo.")
+
+                # 2c. ASS generation -----------------------------------
+                jobs[job_id]["progress"] = 60
+                line_count = subtitle_service.generate_ass(
+                    words, ass_path, request.aspect_ratio, request.style_preset
+                )
+
+                # Clean up temp audio
+                if os.path.exists(audio_path):
+                    os.remove(audio_path)
+
+            logger.info(
+                "[process] 3/3 — Fichier .ass créé : %s (%d ligne(s) de dialogue)",
+                ass_path, line_count,
+            )
+            print(
+                f"[process] 3/3 — Fichier .ass créé : {ass_path} "
+                f"({line_count} ligne(s) de dialogue)"
+            )
 
         # ── 3. FFmpeg encode ────────────────────────────────────────────
         jobs[job_id]["progress"] = 70
@@ -143,3 +213,44 @@ async def process(
     )
     background_tasks.add_task(process_video_task, job_id, request)
     return {"job_id": job_id}
+
+
+def _words_to_text(words: List[Dict[str, Any]]) -> str:
+    """Join Whisper words into readable text, fixing spacing before punctuation."""
+    text = " ".join((w.get("text") or "").strip() for w in words)
+    text = re.sub(r"\s+([,.!?;:])", r"\1", text)
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
+@router.post("/transcribe")
+async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
+    """Transcribe the selected segment with Whisper and return editable text."""
+    possible_files = glob.glob(os.path.join(MEDIA_DIR, f"{request.file_id}.*"))
+    if not possible_files:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Fichier source introuvable pour file_id={request.file_id}",
+        )
+
+    input_path = os.path.abspath(possible_files[0])
+    audio_path = os.path.abspath(
+        os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
+    )
+
+    try:
+        ffmpeg_service.extract_audio(
+            input_path, audio_path, request.start_time, request.end_time
+        )
+        words = whisper_service.transcribe(audio_path)
+    finally:
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+
+    text = _words_to_text(words)
+    logger.info("[transcribe] %d mot(s) transcrit(s).", len(words))
+    print(f"[transcribe] {len(words)} mot(s) transcrit(s).")
+    return {
+        "text": text,
+        "words": words,
+        "word_count": len(words),
+    }

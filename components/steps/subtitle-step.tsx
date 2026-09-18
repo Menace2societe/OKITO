@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Play, Pause } from "lucide-react"
+import { Play, Pause, Wand2, Loader2, Check } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -12,14 +12,19 @@ import { cn } from "@/lib/utils"
 type SubtitleStyle = "bold_tiktok" | "neon_yellow" | "minimal_clean"
 
 interface SubtitleStepProps {
+  fileId: string | null;
   fileUrl: string | null;
   startTime: number;
   endTime: number;
   subtitlesEnabled: boolean;
   subtitleStyle: SubtitleStyle;
+  customSubtitles: string;
   onToggle: (enabled: boolean) => void;
   onStyleChange: (style: SubtitleStyle) => void;
+  onCustomSubtitlesChange: (text: string) => void;
 }
+
+const MAX_WORDS_PER_LINE = 4
 
 const SUBTITLE_PRESETS: {
   value: SubtitleStyle
@@ -47,17 +52,32 @@ const SUBTITLE_PRESETS: {
   },
 ]
 
+function normalizeSubtitleText(text: string): string {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  for (let i = 0; i < words.length; i += MAX_WORDS_PER_LINE) {
+    lines.push(words.slice(i, i + MAX_WORDS_PER_LINE).join(" "))
+  }
+  return lines.join("\n")
+}
+
 export function SubtitleStep({
+  fileId,
   fileUrl,
   startTime,
   endTime,
   subtitlesEnabled,
   subtitleStyle,
+  customSubtitles,
   onToggle,
   onStyleChange,
+  onCustomSubtitlesChange,
 }: SubtitleStepProps) {
   const videoRef = React.useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = React.useState(false)
+  const [loadingTranscribe, setLoadingTranscribe] = React.useState(false)
+  const [transcribeError, setTranscribeError] = React.useState<string | null>(null)
+  const [applied, setApplied] = React.useState(false)
 
   React.useEffect(() => {
     const video = videoRef.current
@@ -89,6 +109,46 @@ export function SubtitleStep({
     setIsPlaying(!isPlaying)
   }
 
+  const fetchTranscription = async () => {
+    if (!fileId) return
+    setLoadingTranscribe(true)
+    setTranscribeError(null)
+    setApplied(false)
+    try {
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file_id: fileId,
+          start_time: startTime,
+          end_time: endTime,
+        }),
+      })
+      if (!res.ok) {
+        let message = `Erreur serveur (${res.status})`
+        try {
+          const err = await res.json()
+          message = err.detail || message
+        } catch {
+          // non-JSON response
+        }
+        throw new Error(message)
+      }
+      const data = await res.json()
+      onCustomSubtitlesChange(normalizeSubtitleText(data.text || ""))
+    } catch (e) {
+      setTranscribeError(e instanceof Error ? e.message : "Erreur inconnue")
+    } finally {
+      setLoadingTranscribe(false)
+    }
+  }
+
+  const handleApply = () => {
+    onCustomSubtitlesChange(normalizeSubtitleText(customSubtitles))
+    setApplied(true)
+  }
+
+  const wordCount = customSubtitles.split(/\s+/).filter(Boolean).length
   const activePreset = SUBTITLE_PRESETS.find((p) => p.value === subtitleStyle)
 
   return (
@@ -164,6 +224,70 @@ export function SubtitleStep({
               Aperçu du cadrage 9:16 et du placement des sous-titres
             </p>
           </div>
+
+          <Card className="space-y-3 p-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="custom-subtitles" className="text-base">
+                Texte des sous-titres
+              </Label>
+              <span className="text-xs text-muted-foreground">
+                {wordCount} mot{wordCount > 1 ? "s" : ""} · {MAX_WORDS_PER_LINE} max/ligne
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Corrigez la transcription ou collez vos paroles. Le texte est
+              automatiquement découpé en lignes de {MAX_WORDS_PER_LINE} mots et
+              le timing est réparti sur la durée de l&apos;extrait.
+            </p>
+            <textarea
+              id="custom-subtitles"
+              value={customSubtitles}
+              onChange={(e) => {
+                onCustomSubtitlesChange(e.target.value)
+                setApplied(false)
+              }}
+              rows={8}
+              placeholder={
+                "Collez ici vos paroles ou la transcription...\nEx : On arrive dans le game, personne ne peut nous stopper"
+              }
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={fetchTranscription}
+                disabled={loadingTranscribe || !fileId}
+              >
+                {loadingTranscribe ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Wand2 className="mr-2 h-4 w-4" />
+                )}
+                Générer depuis l&apos;audio
+              </Button>
+              <Button onClick={handleApply} disabled={!customSubtitles.trim()}>
+                <Check className="mr-2 h-4 w-4" />
+                Appliquer / Régénérer les sous-titres
+              </Button>
+            </div>
+
+            {loadingTranscribe && (
+              <p className="text-xs text-muted-foreground">
+                Transcription en cours… cela peut prendre quelques minutes.
+              </p>
+            )}
+            {transcribeError && (
+              <div className="rounded-lg bg-destructive/15 p-3 text-sm text-destructive border border-destructive/50">
+                {transcribeError}
+              </div>
+            )}
+            {applied && !transcribeError && (
+              <div className="rounded-lg bg-green-600/15 p-3 text-sm text-green-700 border border-green-600/40">
+                Sous-titres appliqués : ils seront utilisés à la place de la
+                transcription Whisper lors du rendu.
+              </div>
+            )}
+          </Card>
 
           <div className="space-y-3">
             <h3 className="font-semibold">Style des sous-titres</h3>

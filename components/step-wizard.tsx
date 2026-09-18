@@ -21,6 +21,7 @@ interface ProjectState {
   aspectRatio: "9:16" | "1:1" | "16:9";
   subtitlesEnabled: boolean;
   subtitleStyle: "bold_tiktok" | "neon_yellow" | "minimal_clean";
+  customSubtitles: string;
   videoFilter: "cinema_intense" | "vibrant_social" | "bw_deep" | "none";
   outputFormat: "mp4" | "mp3" | "mkv";
   jobId: string | null;
@@ -50,6 +51,7 @@ export default function StepWizard() {
     aspectRatio: "9:16",
     subtitlesEnabled: false,
     subtitleStyle: "bold_tiktok",
+    customSubtitles: "",
     videoFilter: "cinema_intense",
     outputFormat: "mp4",
     jobId: null,
@@ -79,6 +81,7 @@ export default function StepWizard() {
       aspectRatio: "9:16",
       subtitlesEnabled: false,
       subtitleStyle: "bold_tiktok",
+      customSubtitles: "",
       videoFilter: "cinema_intense",
       outputFormat: "mp4",
       jobId: null,
@@ -117,6 +120,7 @@ export default function StepWizard() {
           aspect_ratio: state.aspectRatio,
           subtitles_enabled: state.subtitlesEnabled,
           style_preset: state.subtitleStyle,
+          custom_subtitles: state.customSubtitles.trim() ? state.customSubtitles : null,
           video_filter: state.videoFilter,
           output_format: state.outputFormat,
         }),
@@ -261,13 +265,16 @@ export default function StepWizard() {
         
         {currentStep === 2 && (
           <SubtitleStep
+            fileId={state.fileId}
             fileUrl={state.fileUrl}
             startTime={state.startTime}
             endTime={state.endTime}
             subtitlesEnabled={state.subtitlesEnabled}
             subtitleStyle={state.subtitleStyle}
+            customSubtitles={state.customSubtitles}
             onToggle={(enabled) => updateState({ subtitlesEnabled: enabled })}
             onStyleChange={(style) => updateState({ subtitleStyle: style })}
+            onCustomSubtitlesChange={(text) => updateState({ customSubtitles: text })}
           />
         )}
 
