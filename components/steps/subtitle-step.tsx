@@ -92,17 +92,21 @@ export function SubtitleStep({
     const timeoutId = window.setTimeout(() => {
       controller.abort()
     }, TRANSCRIBE_TIMEOUT_MS)
+    const selectedStart = Number(startTime) || 0
+    const selectedEnd =
+      Number(endTime) > selectedStart ? Number(endTime) : selectedStart + 30
 
     try {
       const res = await fetch("/api/transcribe", {
         method: "POST",
         signal: controller.signal,
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_id: fileId || "",
           video_path: videoPath || "",
-          start_time: Number(startTime) || 0,
-          end_time: Number(endTime) || 0,
+          start_time: selectedStart,
+          end_time: selectedEnd,
         }),
       })
       const contentType = res.headers.get("content-type")
