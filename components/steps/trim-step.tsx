@@ -1,15 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { Play, Pause, Smartphone, Square, Monitor } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Smartphone, Square, Monitor } from "lucide-react"
 import { DualRangeSlider } from "@/components/ui/dual-range-slider"
 import { Card } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PreviewPlayer, type AspectRatio, type PreviewPlayerHandle, type VideoFilter } from "@/components/preview-player"
 import { cn } from "@/lib/utils"
-
-type AspectRatio = "9:16" | "1:1" | "16:9"
-type VideoFilter = "cinema_intense" | "vibrant_social" | "bw_deep" | "none"
 
 interface TrimStepProps {
   fileUrl: string | null;
@@ -46,12 +43,6 @@ const VIDEO_FILTERS: { value: VideoFilter; label: string; description: string }[
   },
 ]
 
-const PREVIEW_SIZES: Record<AspectRatio, { width: number; height: number }> = {
-  "9:16": { width: 236, height: 420 },
-  "1:1": { width: 380, height: 380 },
-  "16:9": { width: 640, height: 360 },
-}
-
 export function TrimStep({
   fileUrl,
   duration,
@@ -63,40 +54,8 @@ export function TrimStep({
   onAspectRatioChange,
   onVideoFilterChange,
 }: TrimStepProps) {
-  const videoRef = React.useRef<HTMLVideoElement>(null)
-  const [isPlaying, setIsPlaying] = React.useState(false)
+  const playerRef = React.useRef<PreviewPlayerHandle>(null)
   const [currentTime, setCurrentTime] = React.useState(startTime)
-
-  React.useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime)
-      if (video.currentTime >= endTime) {
-        video.pause()
-        video.currentTime = startTime
-        setIsPlaying(false)
-      }
-    }
-
-    video.addEventListener("timeupdate", handleTimeUpdate)
-    return () => video.removeEventListener("timeupdate", handleTimeUpdate)
-  }, [startTime, endTime])
-
-  const togglePlay = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause()
-      } else {
-        if (videoRef.current.currentTime >= endTime) {
-          videoRef.current.currentTime = startTime
-        }
-        videoRef.current.play()
-      }
-      setIsPlaying(!isPlaying)
-    }
-  }
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
@@ -104,55 +63,29 @@ export function TrimStep({
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`
   }
 
-  const preview = PREVIEW_SIZES[aspectRatio]
-
   return (
     <div className="space-y-8">
       <div className="w-full max-w-2xl mx-auto space-y-4">
-        <div className="flex justify-center">
-          <div
-            className="relative overflow-hidden rounded-lg bg-black"
-            style={{
-              width: preview.width,
-              height: preview.height,
-              maxWidth: "100%",
-            }}
-          >
-            {fileUrl ? (
-              <video
-                ref={videoRef}
-                src={fileUrl}
-                controls
-                preload="metadata"
-                crossOrigin="anonymous"
-                className="h-full w-full object-cover"
-                onLoadedMetadata={() => {
-                  if (videoRef.current && videoRef.current.duration) {
-                    // Sync real duration from the video file
-                    const realDuration = videoRef.current.duration
-                    if (realDuration > 0 && Math.abs(realDuration - duration) > 1) {
-                      onTrimChange(startTime, realDuration)
-                    }
-                  }
-                }}
-                onClick={togglePlay}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <p className="text-white text-sm">Aucune vidéo à prévisualiser</p>
-              </div>
-            )}
-          </div>
-        </div>
-        <p className="text-center text-xs text-muted-foreground">
-          Aperçu du cadrage {aspectRatio}
-        </p>
-        <div className="flex justify-center">
-          <Button variant="outline" size="sm" onClick={togglePlay}>
-            {isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
-            {isPlaying ? "Pause" : "Lire la sélection"}
-          </Button>
-        </div>
+        <PreviewPlayer
+          ref={playerRef}
+          src={fileUrl}
+          selectedFilter={videoFilter}
+          aspectRatio={aspectRatio}
+          startTime={startTime}
+          endTime={endTime}
+          onTimeUpdate={setCurrentTime}
+          onLoadedDuration={(realDuration) => {
+            // Sync real duration from the video file
+            if (realDuration > 0 && Math.abs(realDuration - duration) > 1) {
+              onTrimChange(startTime, realDuration)
+            }
+          }}
+          caption={
+            <p className="text-center text-xs text-muted-foreground">
+              Aperçu du cadrage {aspectRatio} et du filtre appliqué
+            </p>
+          }
+        />
       </div>
 
       <div className="space-y-4">
@@ -168,10 +101,8 @@ export function TrimStep({
           value={[startTime, endTime]}
           onValueChange={(val) => {
             onTrimChange(val[0], val[1])
-            if (videoRef.current) {
-              videoRef.current.currentTime = val[0]
-              setCurrentTime(val[0])
-            }
+            playerRef.current?.seek(val[0])
+            setCurrentTime(val[0])
           }}
         />
       </div>

@@ -1,12 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { Play, Pause, Wand2, Loader2, Check } from "lucide-react"
+import { Wand2, Loader2, Check } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { PreviewPlayer, type VideoFilter } from "@/components/preview-player"
 import { cn } from "@/lib/utils"
 
 type SubtitleStyle = "bold_tiktok" | "neon_yellow" | "minimal_clean"
@@ -19,6 +20,7 @@ interface SubtitleStepProps {
   endTime: number;
   subtitlesEnabled: boolean;
   subtitleStyle: SubtitleStyle;
+  videoFilter: VideoFilter;
   customSubtitles: string;
   onToggle: (enabled: boolean) => void;
   onStyleChange: (style: SubtitleStyle) => void;
@@ -70,46 +72,15 @@ export function SubtitleStep({
   endTime,
   subtitlesEnabled,
   subtitleStyle,
+  videoFilter,
   customSubtitles,
   onToggle,
   onStyleChange,
   onCustomSubtitlesChange,
 }: SubtitleStepProps) {
-  const videoRef = React.useRef<HTMLVideoElement>(null)
-  const [isPlaying, setIsPlaying] = React.useState(false)
   const [loadingTranscribe, setLoadingTranscribe] = React.useState(false)
   const [transcribeError, setTranscribeError] = React.useState<string | null>(null)
   const [applied, setApplied] = React.useState(false)
-
-  React.useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    const handleTimeUpdate = () => {
-      if (video.currentTime >= endTime) {
-        video.pause()
-        video.currentTime = startTime
-        setIsPlaying(false)
-      }
-    }
-
-    video.addEventListener("timeupdate", handleTimeUpdate)
-    return () => video.removeEventListener("timeupdate", handleTimeUpdate)
-  }, [startTime, endTime])
-
-  const togglePlay = () => {
-    const video = videoRef.current
-    if (!video) return
-    if (isPlaying) {
-      video.pause()
-    } else {
-      if (video.currentTime >= endTime || video.currentTime < startTime) {
-        video.currentTime = startTime
-      }
-      video.play()
-    }
-    setIsPlaying(!isPlaying)
-  }
 
   const fetchTranscription = async () => {
     if (!fileId && !videoPath) return
@@ -123,8 +94,8 @@ export function SubtitleStep({
         body: JSON.stringify({
           file_id: fileId,
           video_path: videoPath,
-          start_time: startTime,
-          end_time: endTime,
+          start_time: startTime || 0,
+          end_time: endTime || 0,
         }),
       })
       if (!res.ok) {
@@ -191,59 +162,37 @@ export function SubtitleStep({
 
       {subtitlesEnabled && (
         <div className="space-y-6 animate-in slide-in-from-top-4 fade-in-50">
-          <div className="flex flex-col items-center gap-3">
-            <div
-              className="relative overflow-hidden rounded-lg bg-black"
-              style={{ width: 236, height: 420, maxWidth: "100%" }}
-            >
-              {fileUrl ? (
-                <video
-                  ref={videoRef}
-                  src={fileUrl}
-                  preload="metadata"
-                  crossOrigin="anonymous"
-                  className="h-full w-full object-cover"
-                  onLoadedMetadata={() => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = startTime
-                    }
-                  }}
-                  onClick={togglePlay}
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <p className="text-white text-sm text-center px-4">
-                    Aucune vidéo à prévisualiser
-                  </p>
-                </div>
-              )}
-
-              {/* Subtitle placement preview for the selected preset */}
-              <div className="pointer-events-none absolute inset-x-0 bottom-12 flex justify-center px-3">
-                <span
-                  className={cn(
-                    "rounded px-2 text-center text-base leading-tight",
-                    activePreset?.sampleClass,
-                    subtitleStyle === "bold_tiktok" &&
-                      "drop-shadow-[0_0_2px_#000] [text-shadow:0_0_3px_#000,0_0_3px_#000]",
-                    subtitleStyle === "neon_yellow" &&
-                      "[text-shadow:0_0_4px_#000,0_0_4px_#000]",
-                    subtitleStyle === "minimal_clean" &&
-                      "drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
-                  )}
-                >
-                  Aperçu du sous-titre
-                </span>
-              </div>
+          <PreviewPlayer
+            src={fileUrl}
+            selectedFilter={videoFilter}
+            aspectRatio="9:16"
+            startTime={startTime}
+            endTime={endTime}
+            showControls={false}
+            caption={
+              <p className="text-xs text-muted-foreground">
+                Aperçu du cadrage 9:16, du filtre et du placement des sous-titres
+              </p>
+            }
+          >
+            {/* Subtitle placement preview for the selected preset */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-12 flex justify-center px-3">
+              <span
+                className={cn(
+                  "rounded px-2 text-center text-base leading-tight",
+                  activePreset?.sampleClass,
+                  subtitleStyle === "bold_tiktok" &&
+                    "drop-shadow-[0_0_2px_#000] [text-shadow:0_0_3px_#000,0_0_3px_#000]",
+                  subtitleStyle === "neon_yellow" &&
+                    "[text-shadow:0_0_4px_#000,0_0_4px_#000]",
+                  subtitleStyle === "minimal_clean" &&
+                    "drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                )}
+              >
+                Aperçu du sous-titre
+              </span>
             </div>
-            <Button variant="outline" size="sm" onClick={togglePlay}>
-              {isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
-              {isPlaying ? "Pause" : "Lire la sélection"}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Aperçu du cadrage 9:16 et du placement des sous-titres
-            </p>
-          </div>
+          </PreviewPlayer>
 
           <Card className="space-y-3 p-4">
             <div className="flex items-center justify-between">
@@ -276,7 +225,7 @@ export function SubtitleStep({
               <Button
                 variant="outline"
                 onClick={fetchTranscription}
-                disabled={loadingTranscribe || !fileId}
+                disabled={loadingTranscribe || (!fileId && !videoPath)}
               >
                 {loadingTranscribe ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

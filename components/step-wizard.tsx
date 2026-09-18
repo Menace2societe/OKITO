@@ -275,6 +275,7 @@ export default function StepWizard() {
             endTime={state.endTime}
             subtitlesEnabled={state.subtitlesEnabled}
             subtitleStyle={state.subtitleStyle}
+            videoFilter={state.videoFilter}
             customSubtitles={state.customSubtitles}
             onToggle={(enabled) => updateState({ subtitlesEnabled: enabled })}
             onStyleChange={(style) => updateState({ subtitleStyle: style })}

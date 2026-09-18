@@ -35,8 +35,8 @@ class ProcessRequest(BaseModel):
 class TranscribeRequest(BaseModel):
     file_id: Optional[str] = None
     video_path: Optional[str] = None
-    start_time: float = 0.0
-    end_time: float = 0.0
+    start_time: Optional[float] = 0.0
+    end_time: Optional[float] = None
 
 
 def process_video_task(job_id: str, request: ProcessRequest) -> None:
@@ -258,18 +258,33 @@ async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
         logger.info("[transcribe] Fichier source : %s", input_path)
         print(f"[transcribe] Fichier source : {input_path}")
 
-        end_time = request.end_time
-        if end_time <= request.start_time:
-            end_time = ffmpeg_service.get_duration(input_path)
+        # Explicit float coercion — the payload may send strings or 0.
+        start_t = float(request.start_time or 0.0)
+        end_t = float(request.end_time) if request.end_time else None
+
+        # Default to the full media duration when end_time is missing/zero.
+        if end_t is None or end_t <= start_t:
+            end_t = ffmpeg_service.get_duration(input_path)
+
+        if end_t <= start_t:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Plage temporelle invalide : "
+                    f"start_time={start_t}, end_time={end_t}."
+                ),
+            )
+
+        logger.info(
+            "[transcribe] Extraction audio %.2fs → %.2fs", start_t, end_t
+        )
 
         audio_path = os.path.abspath(
             os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
         )
 
         try:
-            ffmpeg_service.extract_audio(
-                input_path, audio_path, request.start_time, end_time
-            )
+            ffmpeg_service.extract_audio(input_path, audio_path, start_t, end_t)
             if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
                 raise RuntimeError(
                     "L'extraction audio a échoué ou produit un fichier vide."
@@ -283,6 +298,7 @@ async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
         logger.info("[transcribe] %d mot(s) transcrit(s).", len(words))
         print(f"[transcribe] {len(words)} mot(s) transcrit(s).")
         return {
+            "status": "success",
             "text": text,
             "words": words,
             "word_count": len(words),
@@ -292,4 +308,4 @@ async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
     except Exception as e:
         logger.error("[ERROR /api/transcribe] %s", str(e))
         print(f"[ERROR /api/transcribe] {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Erreur transcription: {str(e)}")
