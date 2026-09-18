@@ -307,6 +307,7 @@ async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
             "text": text,
             "words": words,
             "word_count": len(words),
+            "whisper": whisper_service.get_runtime_config(),
         }
     except HTTPException as http_ex:
         raise http_ex

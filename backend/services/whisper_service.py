@@ -5,9 +5,28 @@ from faster_whisper import WhisperModel
 
 logger = logging.getLogger(__name__)
 
-MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "medium")
-DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
-COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+try:
+    import torch
+except ImportError:
+    torch = None
+
+
+def _detect_device() -> str:
+    if torch is not None and torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
+
+DEVICE = os.getenv("WHISPER_DEVICE") or _detect_device()
+MODEL_SIZE = os.getenv(
+    "WHISPER_MODEL_SIZE",
+    "small" if DEVICE == "cpu" else "medium",
+)
+COMPUTE_TYPE = os.getenv(
+    "WHISPER_COMPUTE_TYPE",
+    "int8" if DEVICE == "cpu" else "float16",
+)
+BEAM_SIZE = int(os.getenv("WHISPER_BEAM_SIZE", "1"))
 LANGUAGE = "fr"
 INITIAL_PROMPT = (
     "Transcription en français, argot, termes de rap, ClipFlow, 243, Kinshasa."
@@ -21,7 +40,7 @@ BASE_DECODE_PARAMS: Dict[str, Any] = {
     "language": LANGUAGE,
     "initial_prompt": INITIAL_PROMPT,
     "word_timestamps": True,
-    "beam_size": 5,
+    "beam_size": BEAM_SIZE,
     "temperature": [0.0, 0.2, 0.4],
 }
 
@@ -42,8 +61,26 @@ _model = None
 def get_model() -> WhisperModel:
     global _model
     if _model is None:
+        logger.info(
+            "[whisper] Chargement modèle=%s device=%s compute_type=%s beam_size=%s",
+            MODEL_SIZE, DEVICE, COMPUTE_TYPE, BEAM_SIZE,
+        )
+        print(
+            "[whisper] Chargement "
+            f"modèle={MODEL_SIZE}, device={DEVICE}, "
+            f"compute_type={COMPUTE_TYPE}, beam_size={BEAM_SIZE}"
+        )
         _model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
     return _model
+
+
+def get_runtime_config() -> Dict[str, Any]:
+    return {
+        "model_size": MODEL_SIZE,
+        "device": DEVICE,
+        "compute_type": COMPUTE_TYPE,
+        "beam_size": BEAM_SIZE,
+    }
 
 
 def _collect_words(segments) -> tuple[List[Dict[str, Any]], int]:
@@ -74,10 +111,13 @@ def transcribe(audio_path: str) -> List[Dict[str, Any]]:
     model = get_model()
 
     logger.info(
-        "[whisper] Transcription de %s (modèle=%s, langue=%s)",
-        audio_path, MODEL_SIZE, LANGUAGE,
+        "[whisper] Transcription de %s (modèle=%s, device=%s, compute_type=%s, langue=%s)",
+        audio_path, MODEL_SIZE, DEVICE, COMPUTE_TYPE, LANGUAGE,
     )
-    print(f"[whisper] Transcription de {audio_path} (modèle={MODEL_SIZE}, langue={LANGUAGE})")
+    print(
+        f"[whisper] Transcription de {audio_path} "
+        f"(modèle={MODEL_SIZE}, device={DEVICE}, compute_type={COMPUTE_TYPE}, langue={LANGUAGE})"
+    )
 
     segments, info = model.transcribe(audio_path, **BASE_DECODE_PARAMS)
     words_list, segment_count = _collect_words(segments)

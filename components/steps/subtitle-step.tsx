@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Wand2, Loader2, Check } from "lucide-react"
+import { Wand2, Loader2, Check, RefreshCcw } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -28,6 +28,7 @@ interface SubtitleStepProps {
 }
 
 const MAX_WORDS_PER_LINE = 4
+const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000
 
 const SUBTITLE_PRESETS: {
   value: SubtitleStyle
@@ -87,9 +88,15 @@ export function SubtitleStep({
     setLoadingTranscribe(true)
     setTranscribeError(null)
     setApplied(false)
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => {
+      controller.abort()
+    }, TRANSCRIBE_TIMEOUT_MS)
+
     try {
       const res = await fetch("/api/transcribe", {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_id: fileId || "",
@@ -111,8 +118,15 @@ export function SubtitleStep({
       }
       onCustomSubtitlesChange(normalizeSubtitleText(data.text || ""))
     } catch (e) {
-      setTranscribeError(e instanceof Error ? e.message : "Erreur inconnue")
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setTranscribeError(
+          "La transcription prend plus de 5 minutes. Relancez avec un extrait plus court ou un modèle Whisper plus léger."
+        )
+      } else {
+        setTranscribeError(e instanceof Error ? e.message : "Erreur inconnue")
+      }
     } finally {
+      window.clearTimeout(timeoutId)
       setLoadingTranscribe(false)
     }
   }
@@ -229,10 +243,14 @@ export function SubtitleStep({
               >
                 {loadingTranscribe ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : customSubtitles.trim() || transcribeError ? (
+                  <RefreshCcw className="mr-2 h-4 w-4" />
                 ) : (
                   <Wand2 className="mr-2 h-4 w-4" />
                 )}
-                Générer depuis l&apos;audio
+                {customSubtitles.trim() || transcribeError
+                  ? "Relancer la transcription"
+                  : "Générer depuis l'audio"}
               </Button>
               <Button onClick={handleApply} disabled={!customSubtitles.trim()}>
                 <Check className="mr-2 h-4 w-4" />
@@ -243,12 +261,22 @@ export function SubtitleStep({
             {loadingTranscribe && (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Chargement de la transcription… cela peut prendre quelques minutes.
+                Whisper analyse l&apos;audio avec le modèle medium sur GPU, ou small/int8 sur CPU. Cela peut prendre quelques minutes.
               </p>
             )}
             {transcribeError && (
-              <div className="rounded-lg bg-destructive/15 p-3 text-sm text-destructive border border-destructive/50">
-                {transcribeError}
+              <div className="space-y-3 rounded-lg bg-destructive/15 p-3 text-sm text-destructive border border-destructive/50">
+                <p>{transcribeError}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchTranscription}
+                  disabled={loadingTranscribe || (!fileId && !videoPath)}
+                >
+                  <RefreshCcw className="mr-2 h-4 w-4" />
+                  Relancer
+                </Button>
               </div>
             )}
             {applied && !transcribeError && (
