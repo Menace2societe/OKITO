@@ -92,23 +92,23 @@ export function SubtitleStep({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          file_id: fileId,
-          video_path: videoPath,
-          start_time: startTime || 0,
-          end_time: endTime || 0,
+          file_id: fileId || "",
+          video_path: videoPath || "",
+          start_time: Number(startTime) || 0,
+          end_time: Number(endTime) || 0,
         }),
       })
-      if (!res.ok) {
-        let message = `Erreur serveur (${res.status})`
-        try {
-          const err = await res.json()
-          message = err.detail || message
-        } catch {
-          // non-JSON response
-        }
-        throw new Error(message)
+      const contentType = res.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        const rawText = await res.text()
+        console.error("[ClipFlow] Réponse brute non-JSON du serveur :", rawText)
+        throw new Error("Le serveur a renvoyé une erreur HTML au lieu d'un JSON.")
       }
+
       const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || "Erreur lors de la génération des sous-titres.")
+      }
       onCustomSubtitlesChange(normalizeSubtitleText(data.text || ""))
     } catch (e) {
       setTranscribeError(e instanceof Error ? e.message : "Erreur inconnue")

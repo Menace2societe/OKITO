@@ -253,8 +253,15 @@ def _resolve_input_path(
 @router.post("/transcribe")
 async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
     """Transcribe the selected segment with Whisper and return editable text."""
+    audio_path: Optional[str] = None
     try:
         input_path = _resolve_input_path(request.file_id, request.video_path)
+        if not input_path or not os.path.isfile(input_path):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Fichier vidéo introuvable : {input_path}",
+            )
+
         logger.info("[transcribe] Fichier source : %s", input_path)
         print(f"[transcribe] Fichier source : {input_path}")
 
@@ -283,16 +290,14 @@ async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
             os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
         )
 
-        try:
-            ffmpeg_service.extract_audio(input_path, audio_path, start_t, end_t)
-            if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
-                raise RuntimeError(
-                    "L'extraction audio a échoué ou produit un fichier vide."
-                )
-            words = whisper_service.transcribe(audio_path)
-        finally:
-            if os.path.exists(audio_path):
-                os.remove(audio_path)
+        ffmpeg_service.extract_audio(input_path, audio_path, start_t, end_t)
+        if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="L'extraction audio a généré un fichier vide.",
+            )
+
+        words = whisper_service.transcribe(audio_path)
 
         text = _words_to_text(words)
         logger.info("[transcribe] %d mot(s) transcrit(s).", len(words))
@@ -303,9 +308,16 @@ async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
             "words": words,
             "word_count": len(words),
         }
-    except HTTPException:
-        raise
+    except HTTPException as http_ex:
+        raise http_ex
     except Exception as e:
-        logger.error("[ERROR /api/transcribe] %s", str(e))
-        print(f"[ERROR /api/transcribe] {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Erreur transcription: {str(e)}")
+        logger.error("[ERROR /api/transcribe] Traceback backend :\n%s", traceback.format_exc())
+        print("\n[ERROR /api/transcribe] Traceback backend :")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur serveur transcription: {str(e)}",
+        )
+    finally:
+        if audio_path and os.path.exists(audio_path):
+            os.remove(audio_path)
