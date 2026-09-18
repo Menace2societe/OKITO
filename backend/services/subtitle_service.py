@@ -45,8 +45,31 @@ ASS_STYLE_PRESETS: Dict[str, Dict[str, Any]] = {
 
 DEFAULT_STYLE_PRESET = "bold_tiktok"
 
+# Safety net: drop any word/segment where Whisper echoed the initial prompt.
+PROMPT_ECHO_MARKER = "Transcription en français"
+
 # Max words shown per subtitle line — keep punchlines short for 9:16.
 MAX_WORDS_PER_LINE = 4
+
+
+def _sanitize_words(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Remove any echoed initial-prompt text from the transcribed words."""
+    cleaned = [
+        word
+        for word in words
+        if PROMPT_ECHO_MARKER.lower() not in (word.get("text") or "").lower()
+    ]
+    # Also strip a leading run that reconstructs the start of the prompt.
+    prompt_tokens = [
+        token.lower().strip(" ,.!?…") for token in PROMPT_ECHO_MARKER.split()
+    ]
+    while cleaned:
+        first = (cleaned[0].get("text") or "").lower().strip(" ,.!?…")
+        if first and first in prompt_tokens:
+            cleaned.pop(0)
+        else:
+            break
+    return cleaned
 
 
 def _ends_sentence(text: str) -> bool:
@@ -84,6 +107,8 @@ def generate_ass(
         play_res_y = 1080
 
     style_line = _build_style_line(style_preset)
+
+    words = _sanitize_words(words)
 
     ass_content = f"""[Script Info]
 ScriptType: v4.00+

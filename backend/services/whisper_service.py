@@ -9,6 +9,8 @@ LANGUAGE = "fr"
 INITIAL_PROMPT = (
     "Transcription en français, argot, termes de rap, ClipFlow, 243, Kinshasa."
 )
+# Marker used to detect (and drop) the prompt if the model regurgitates it.
+PROMPT_ECHO_MARKER = "Transcription en français"
 
 _model = None
 
@@ -20,6 +22,8 @@ def get_model() -> WhisperModel:
 
 def transcribe(audio_path: str) -> List[Dict[str, Any]]:
     model = get_model()
+    # initial_prompt only conditions the decoding — it is never merged into the
+    # returned text, but some decoders may still echo it as a segment.
     segments, info = model.transcribe(
         audio_path,
         language=LANGUAGE,
@@ -30,7 +34,15 @@ def transcribe(audio_path: str) -> List[Dict[str, Any]]:
 
     words_list = []
     for segment in segments:
+        segment_text = segment.text or ""
+        if PROMPT_ECHO_MARKER.lower() in segment_text.lower():
+            continue
+        if not segment.words:
+            continue
         for word in segment.words:
+            word_text = word.word or ""
+            if PROMPT_ECHO_MARKER.lower() in word_text.lower():
+                continue
             words_list.append({
                 "start": word.start,
                 "end": word.end,

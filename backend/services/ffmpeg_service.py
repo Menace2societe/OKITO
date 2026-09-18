@@ -163,20 +163,42 @@ def process_video(
 
     vf_chain = ",".join(vf_parts)
 
+    # Pick encoder settings based on the requested output container.
+    ext = os.path.splitext(abs_output)[1].lower()
+
+    if ext == ".mp3":
+        # Audio-only export: no video codec, no video filter output.
+        output_options = [
+            "-vn",
+            "-c:a", "libmp3lame",
+            "-b:a", "192k",
+        ]
+    else:
+        # Universal H.264 / AAC / yuv420p settings for broad playback support
+        # (web, Windows Media Player, mobile). Without yuv420p, FFmpeg may
+        # preserve a 10-bit / 4:2:2 source that many players cannot decode.
+        output_options = [
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "192k",
+        ]
+        if ext == ".mp4":
+            # faststart only applies to the MP4/MOV muxer.
+            output_options += ["-movflags", "+faststart"]
+
     cmd = [
         _find_ffmpeg(),
         "-y",
         "-ss", str(start_time),
         "-to", str(end_time),
         "-i", abs_input,
-        "-vf", vf_chain,
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        abs_output,
     ]
+    if ext != ".mp3":
+        cmd += ["-vf", vf_chain]
+    cmd += [*output_options, abs_output]
 
     _run_cmd(cmd, label="ffmpeg:process_video")
     return abs_output
