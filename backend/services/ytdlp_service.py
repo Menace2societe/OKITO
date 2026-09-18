@@ -31,4 +31,5 @@ def download_video(url: str, output_dir: str) -> Dict[str, Any]:
         "duration": duration,
         "url": f"/api/files/{filename}",
         "preview_url": f"http://localhost:8000/media/{filename}",
+        "video_path": os.path.abspath(os.path.join(output_dir, filename)),
     }

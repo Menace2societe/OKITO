@@ -33,9 +33,10 @@ class ProcessRequest(BaseModel):
 
 
 class TranscribeRequest(BaseModel):
-    file_id: str
-    start_time: float
-    end_time: float
+    file_id: Optional[str] = None
+    video_path: Optional[str] = None
+    start_time: float = 0.0
+    end_time: float = 0.0
 
 
 def process_video_task(job_id: str, request: ProcessRequest) -> None:
@@ -222,35 +223,73 @@ def _words_to_text(words: List[Dict[str, Any]]) -> str:
     return re.sub(r"\s{2,}", " ", text).strip()
 
 
+def _resolve_input_path(
+    file_id: Optional[str], video_path: Optional[str]
+) -> str:
+    """Resolve a usable input file from an explicit path or a file_id."""
+    media_root = os.path.abspath(MEDIA_DIR)
+
+    if video_path:
+        candidate = os.path.abspath(video_path)
+        try:
+            inside_media = os.path.commonpath([media_root, candidate]) == media_root
+        except ValueError:
+            inside_media = False
+        if inside_media and os.path.isfile(candidate):
+            return candidate
+        logger.warning("[transcribe] video_path invalide ou hors media : %s", candidate)
+
+    if file_id:
+        matches = glob.glob(os.path.join(MEDIA_DIR, f"{file_id}.*"))
+        if matches:
+            return os.path.abspath(matches[0])
+
+    raise HTTPException(
+        status_code=400,
+        detail="Fichier vidéo introuvable sur le disque.",
+    )
+
+
 @router.post("/transcribe")
 async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
     """Transcribe the selected segment with Whisper and return editable text."""
-    possible_files = glob.glob(os.path.join(MEDIA_DIR, f"{request.file_id}.*"))
-    if not possible_files:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Fichier source introuvable pour file_id={request.file_id}",
-        )
-
-    input_path = os.path.abspath(possible_files[0])
-    audio_path = os.path.abspath(
-        os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
-    )
-
     try:
-        ffmpeg_service.extract_audio(
-            input_path, audio_path, request.start_time, request.end_time
-        )
-        words = whisper_service.transcribe(audio_path)
-    finally:
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
+        input_path = _resolve_input_path(request.file_id, request.video_path)
+        logger.info("[transcribe] Fichier source : %s", input_path)
+        print(f"[transcribe] Fichier source : {input_path}")
 
-    text = _words_to_text(words)
-    logger.info("[transcribe] %d mot(s) transcrit(s).", len(words))
-    print(f"[transcribe] {len(words)} mot(s) transcrit(s).")
-    return {
-        "text": text,
-        "words": words,
-        "word_count": len(words),
-    }
+        end_time = request.end_time
+        if end_time <= request.start_time:
+            end_time = ffmpeg_service.get_duration(input_path)
+
+        audio_path = os.path.abspath(
+            os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
+        )
+
+        try:
+            ffmpeg_service.extract_audio(
+                input_path, audio_path, request.start_time, end_time
+            )
+            if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
+                raise RuntimeError(
+                    "L'extraction audio a échoué ou produit un fichier vide."
+                )
+            words = whisper_service.transcribe(audio_path)
+        finally:
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+
+        text = _words_to_text(words)
+        logger.info("[transcribe] %d mot(s) transcrit(s).", len(words))
+        print(f"[transcribe] {len(words)} mot(s) transcrit(s).")
+        return {
+            "text": text,
+            "words": words,
+            "word_count": len(words),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[ERROR /api/transcribe] %s", str(e))
+        print(f"[ERROR /api/transcribe] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

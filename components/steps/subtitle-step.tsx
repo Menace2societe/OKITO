@@ -13,6 +13,7 @@ type SubtitleStyle = "bold_tiktok" | "neon_yellow" | "minimal_clean"
 
 interface SubtitleStepProps {
   fileId: string | null;
+  videoPath: string | null;
   fileUrl: string | null;
   startTime: number;
   endTime: number;
@@ -63,6 +64,7 @@ function normalizeSubtitleText(text: string): string {
 
 export function SubtitleStep({
   fileId,
+  videoPath,
   fileUrl,
   startTime,
   endTime,
@@ -110,7 +112,7 @@ export function SubtitleStep({
   }
 
   const fetchTranscription = async () => {
-    if (!fileId) return
+    if (!fileId && !videoPath) return
     setLoadingTranscribe(true)
     setTranscribeError(null)
     setApplied(false)
@@ -120,6 +122,7 @@ export function SubtitleStep({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_id: fileId,
+          video_path: videoPath,
           start_time: startTime,
           end_time: endTime,
         }),
@@ -147,6 +150,23 @@ export function SubtitleStep({
     onCustomSubtitlesChange(normalizeSubtitleText(customSubtitles))
     setApplied(true)
   }
+
+  // Auto-load the initial transcription once, when subtitles are enabled and
+  // the field is still empty (e.g. arriving on the Subtitles step).
+  const autoLoadedSource = React.useRef<string | null>(null)
+  const sourceKey = videoPath || fileId || ""
+
+  React.useEffect(() => {
+    if (!subtitlesEnabled) return
+    if (!sourceKey) return
+    if (customSubtitles.trim()) return
+    if (loadingTranscribe) return
+    if (autoLoadedSource.current === sourceKey) return
+
+    autoLoadedSource.current = sourceKey
+    void fetchTranscription()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtitlesEnabled, sourceKey, customSubtitles, loadingTranscribe])
 
   const wordCount = customSubtitles.split(/\s+/).filter(Boolean).length
   const activePreset = SUBTITLE_PRESETS.find((p) => p.value === subtitleStyle)
@@ -272,8 +292,9 @@ export function SubtitleStep({
             </div>
 
             {loadingTranscribe && (
-              <p className="text-xs text-muted-foreground">
-                Transcription en cours… cela peut prendre quelques minutes.
+              <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Chargement de la transcription… cela peut prendre quelques minutes.
               </p>
             )}
             {transcribeError && (

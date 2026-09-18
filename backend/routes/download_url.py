@@ -64,6 +64,7 @@ async def download_url(request: URLRequest) -> Dict[str, Any]:
             "duration": result["duration"],
             "url": result["url"],
             "preview_url": result["preview_url"],
+            "video_path": result["video_path"],
         }
 
     except HTTPException:

@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
 interface ImportStepProps {
-  onFileImported: (fileId: string, fileName: string, fileUrl: string, duration: number) => void;
+  onFileImported: (
+    fileId: string,
+    fileName: string,
+    fileUrl: string,
+    duration: number,
+    videoPath: string
+  ) => void;
 }
 
 export function ImportStep({ onFileImported }: ImportStepProps) {
@@ -64,7 +70,7 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
       }
 
       const data = await res.json()
-      onFileImported(data.file_id, data.original_name, data.preview_url, data.duration)
+      onFileImported(data.file_id, data.original_name, data.preview_url, data.duration, data.video_path)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur inconnue")
     } finally {
@@ -95,7 +101,7 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
       }
 
       const data = await res.json()
-      onFileImported(data.file_id, data.title, data.preview_url, data.duration)
+      onFileImported(data.file_id, data.title, data.preview_url, data.duration, data.video_path)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur inconnue")
     } finally {

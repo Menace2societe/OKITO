@@ -35,4 +35,5 @@ async def upload_file(file: UploadFile = File(...)) -> Dict[str, Any]:
         "duration": duration,
         "url": f"/api/files/{new_filename}",
         "preview_url": f"http://localhost:8000/media/{new_filename}",
+        "video_path": os.path.abspath(file_path),
     }

@@ -15,6 +15,7 @@ interface ProjectState {
   fileId: string | null;
   fileName: string | null;
   fileUrl: string | null;
+  videoPath: string | null;
   duration: number;
   startTime: number;
   endTime: number;
@@ -45,6 +46,7 @@ export default function StepWizard() {
     fileId: null,
     fileName: null,
     fileUrl: null,
+    videoPath: null,
     duration: 0,
     startTime: 0,
     endTime: 0,
@@ -75,6 +77,7 @@ export default function StepWizard() {
       fileId: null,
       fileName: null,
       fileUrl: null,
+      videoPath: null,
       duration: 0,
       startTime: 0,
       endTime: 0,
@@ -240,9 +243,9 @@ export default function StepWizard() {
       <div className="mt-12 min-h-[400px]">
         {currentStep === 0 && (
           <ImportStep
-            onFileImported={(fileId, fileName, fileUrl, duration) => {
+            onFileImported={(fileId, fileName, fileUrl, duration, videoPath) => {
               updateState({ 
-                fileId, fileName, fileUrl, duration, 
+                fileId, fileName, fileUrl, duration, videoPath,
                 endTime: duration 
               })
             }}
@@ -266,6 +269,7 @@ export default function StepWizard() {
         {currentStep === 2 && (
           <SubtitleStep
             fileId={state.fileId}
+            videoPath={state.videoPath}
             fileUrl={state.fileUrl}
             startTime={state.startTime}
             endTime={state.endTime}
