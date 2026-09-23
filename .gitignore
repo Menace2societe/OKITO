@@ -36,6 +36,7 @@ env/
 
 # Media files (temporary)
 backend/media/
+backend/cookies.txt
 *.mp4
 *.mkv
 *.mov

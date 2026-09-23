@@ -1,6 +1,7 @@
 import logging
+import re
+import traceback
 from typing import Dict, Any
-from urllib.parse import urlparse, parse_qs
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -17,26 +18,21 @@ class URLRequest(BaseModel):
 
 
 def sanitize_youtube_url(url: str) -> str:
-    """Strip playlist parameters so yt-dlp only downloads a single video.
+    """Extract the bare YouTube video URL and drop playlist/mix parameters.
 
-    - youtube.com/watch?v=ID&list=PL... → youtube.com/watch?v=ID
-    - youtu.be/ID?list=PL...            → youtube.com/watch?v=ID
+    - youtube.com/watch?v=ID&list=RD... -> youtube.com/watch?v=ID
+    - youtube.com/shorts/ID?list=RD...  -> youtube.com/watch?v=ID
+    - youtu.be/ID?list=RD...            -> youtube.com/watch?v=ID
     - Non-YouTube URLs are returned as-is.
     """
-    parsed = urlparse(url)
-    host = parsed.netloc.lower().replace("www.", "")
-
-    if host in ("youtube.com", "m.youtube.com"):
-        query = parse_qs(parsed.query)
-        video_id = query.get("v", [None])[0]
-        if video_id:
-            return f"https://www.youtube.com/watch?v={video_id}"
-
-    elif host == "youtu.be":
-        # youtu.be/<VIDEO_ID>?list=...
-        video_id = parsed.path.lstrip("/")
-        if video_id:
-            return f"https://www.youtube.com/watch?v={video_id}"
+    youtube_match = re.search(
+        r"(?:youtube\.com/(?:watch\?.*?v=|embed/|shorts/)|youtu\.be/)"
+        r"([0-9A-Za-z_-]{11})(?=[^0-9A-Za-z_-]|$)",
+        url,
+        re.IGNORECASE,
+    )
+    if youtube_match:
+        return f"https://www.youtube.com/watch?v={youtube_match.group(1)}"
 
     return url
 
@@ -73,7 +69,12 @@ async def download_url(request: URLRequest) -> Dict[str, Any]:
 
     except Exception as e:
         logger.exception("Erreur lors du téléchargement yt-dlp")
+        print("\n[ERROR /api/download-url] Traceback :")
+        traceback.print_exc()
         raise HTTPException(
-            status_code=500,
-            detail=f"Erreur d'extraction : {str(e)}",
+            status_code=400,
+            detail=(
+                "Impossible de télécharger cette vidéo pour le moment. "
+                "Veuillez vérifier le lien ou réessayer ultérieurement."
+            ),
         )

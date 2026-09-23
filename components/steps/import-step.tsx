@@ -85,22 +85,23 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
     try {
       const res = await fetch("/api/download-url", {
         method: "POST",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       })
 
-      if (!res.ok) {
-        let message = `Erreur serveur (${res.status})`
-        try {
-          const err = await res.json()
-          message = err.detail || message
-        } catch {
-          // Response body wasn't JSON — use fallback
-        }
-        throw new Error(message)
+      const contentType = res.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        const rawText = await res.text()
+        console.error("[ClipFlow Import] Réponse brute non-JSON :", rawText)
+        throw new Error("Le serveur a renvoyé une réponse invalide pendant l'import.")
       }
 
       const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || "Erreur lors du téléchargement de la vidéo.")
+      }
+
       onFileImported(data.file_id, data.title, data.preview_url, data.duration, data.video_path)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur inconnue")
