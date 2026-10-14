@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import threading
 import uuid
 import wave
 from typing import Any, Callable, Dict, List, Optional
@@ -46,24 +47,57 @@ def _transcript_path(file_id: str) -> str:
     return os.path.join(MEDIA_DIR, f"{file_id}.transcript.json")
 
 
-def get_transcript(file_id: str, input_path: str) -> Dict[str, Any]:
-    """Return {"duration", "words", "energy"} for the whole file, cached on disk."""
+_transcript_locks: Dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
+
+
+def _lock_for(file_id: str) -> threading.Lock:
+    with _locks_guard:
+        return _transcript_locks.setdefault(file_id, threading.Lock())
+
+
+def get_transcript(
+    file_id: str,
+    input_path: str,
+    quality: Optional[str] = None,
+    vocabulary: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Return {"duration", "words", "energy"} for the whole file, cached on disk.
+
+    The cache is reused only if it was made with the same model and prompt,
+    so changing the vocabulary or the quality re-transcribes. Concurrent
+    calls for one file wait for the first transcription instead of redoing it.
+    """
+    with _lock_for(file_id):
+        return _get_transcript_locked(file_id, input_path, quality, vocabulary)
+
+
+def _get_transcript_locked(
+    file_id: str, input_path: str, quality: Optional[str], vocabulary: Optional[str]
+) -> Dict[str, Any]:
     cache = _transcript_path(file_id)
-    if os.path.exists(cache) and os.path.getmtime(cache) >= os.path.getmtime(input_path):
+    key = {
+        "model": whisper_service.model_size_for(quality),
+        "prompt": whisper_service.build_prompt(vocabulary),
+    }
+    if os.path.exists(cache):
         with open(cache, encoding="utf-8") as f:
-            return json.load(f)
+            cached = json.load(f)
+        if all(cached.get(k) == v for k, v in key.items()):
+            return cached
 
     duration = ffmpeg_service.get_duration(input_path)
     audio_path = os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
     try:
         ffmpeg_service.extract_audio(input_path, audio_path, 0.0, duration)
         energy = _energy_per_second(audio_path)
-        words = _sanitize_words(whisper_service.transcribe(audio_path))
+        words = _sanitize_words(whisper_service.transcribe(audio_path, quality, vocabulary))
     finally:
         if os.path.exists(audio_path):
             os.remove(audio_path)
 
     data = {
+        **key,
         "duration": duration,
         "words": [
             {"text": (w["text"] or "").strip(), "start": float(w["start"]), "end": float(w["end"])}
@@ -269,10 +303,11 @@ def _rank_heuristic(
 # Public API
 # ---------------------------------------------------------------------------
 
-def _clip_words(words: List[Dict[str, Any]], start: float, end: float) -> List[Dict[str, Any]]:
+def clip_words(words: List[Dict[str, Any]], start: float, end: float) -> List[Dict[str, Any]]:
     """Words inside [start, end], re-timed relative to the clip start."""
     return [
-        {"text": w["text"], "start": round(w["start"] - start, 3), "end": round(w["end"] - start, 3)}
+        {"text": w["text"], "start": round(max(0.0, w["start"] - start), 3),
+         "end": round(max(0.0, w["end"] - start), 3)}
         for w in words
         if w["start"] >= start - 0.05 and w["end"] <= end + 0.05
     ]
@@ -285,6 +320,8 @@ def find_moments(
     min_duration: float = 15.0,
     max_duration: float = 60.0,
     progress: Optional[ProgressFn] = None,
+    quality: Optional[str] = None,
+    vocabulary: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return {"source": "claude"|"heuristic", "moments": [...]}, best first.
 
@@ -293,7 +330,7 @@ def find_moments(
     """
     report = progress or (lambda _p: None)
     report(5)
-    transcript = get_transcript(file_id, input_path)
+    transcript = get_transcript(file_id, input_path, quality, vocabulary)
     report(70)
     words = transcript["words"]
     segments = _segments(words)
@@ -313,7 +350,7 @@ def find_moments(
     for m in moments:
         m["start_time"] = round(max(0.0, m["start_time"] - 0.1), 2)
         m["end_time"] = round(min(transcript["duration"], m["end_time"] + 0.25), 2)
-        m["words"] = _clip_words(words, m["start_time"], m["end_time"])
+        m["words"] = clip_words(words, m["start_time"], m["end_time"])
         m["text"] = " ".join(w["text"] for w in m["words"])
         m["source"] = source
     return {"source": source, "moments": moments[:count]}

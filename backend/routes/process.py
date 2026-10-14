@@ -5,9 +5,9 @@ import logging
 import traceback
 from typing import Dict, Any, Optional, List, Union
 from fastapi import APIRouter, BackgroundTasks, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from backend.config import MEDIA_DIR, find_source
-from backend.services import ffmpeg_service, whisper_service, subtitle_service, job_store
+from backend.services import ffmpeg_service, whisper_service, subtitle_service, job_store, moment_finder
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,12 @@ class ProcessRequest(BaseModel):
     # text keep the real speech timing instead of an even distribution.
     reference_words: Optional[List[Dict[str, Any]]] = None
     output_format: str
+    # 9:16 framing: 0 = whole frame on blurred bars, 100 = filled (cropped).
+    # None keeps the mode's default (fit → 0, crop / face → 100).
+    zoom: Optional[float] = Field(None, ge=0, le=100)
+    # Whisper: "accurate" (medium) or "fast" (small), plus words to bias it.
+    quality: str = "accurate"
+    vocabulary: Optional[str] = None
 
 
 class TranscribeRequest(BaseModel):
@@ -36,6 +42,8 @@ class TranscribeRequest(BaseModel):
     video_path: Optional[str] = None
     start_time: Optional[float] = 0.0
     end_time: Optional[float] = None
+    quality: str = "accurate"
+    vocabulary: Optional[str] = None
 
 
 def process_video_task(job_id: str, request: ProcessRequest) -> None:
@@ -121,7 +129,9 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
                 job_store.update(job_id, progress=30)
                 logger.info("[process] 2/3 — Transcription Whisper...")
                 print("[process] 2/3 — Transcription Whisper...")
-                words = whisper_service.transcribe(audio_path)
+                words = whisper_service.transcribe(
+                    audio_path, request.quality, request.vocabulary
+                )
                 logger.info("[process] Whisper a retourné %d mot(s).", len(words))
                 print(f"[process] Whisper a retourné {len(words)} mot(s).")
                 if not words:
@@ -170,6 +180,7 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
             aspect_ratio=request.aspect_ratio,
             ass_path=ass_path,
             video_filter=request.video_filter,
+            zoom=request.zoom,
         )
 
         # ── 4. Success ──────────────────────────────────────────────────
@@ -250,75 +261,110 @@ def _resolve_input_path(
     )
 
 
-@router.post("/transcribe")
-def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
-    """Transcribe the selected segment with Whisper and return editable text."""
-    audio_path: Optional[str] = None
+# Sources up to this length are transcribed whole and cached; longer ones
+# only have the selected segment transcribed.
+FULL_TRANSCRIPT_MAX_DURATION = 600.0
+
+
+def _transcribe_segment(
+    input_path: str, start_t: float, end_t: float,
+    quality: Optional[str], vocabulary: Optional[str],
+) -> List[Dict[str, Any]]:
+    logger.info("[transcribe] Extraction audio %.2fs → %.2fs", start_t, end_t)
+    audio_path = os.path.abspath(
+        os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
+    )
     try:
-        input_path = _resolve_input_path(request.file_id, request.video_path)
-        if not input_path or not os.path.isfile(input_path):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Fichier vidéo introuvable : {input_path}",
-            )
-
-        logger.info("[transcribe] Fichier source : %s", input_path)
-        print(f"[transcribe] Fichier source : {input_path}")
-
-        # Explicit float coercion — the payload may send strings or 0.
-        start_t = float(request.start_time or 0.0)
-        end_t = float(request.end_time) if request.end_time else None
-
-        # Default to the full media duration when end_time is missing/zero.
-        if end_t is None or end_t <= start_t:
-            end_t = ffmpeg_service.get_duration(input_path)
-
-        if end_t <= start_t:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Plage temporelle invalide : "
-                    f"start_time={start_t}, end_time={end_t}."
-                ),
-            )
-
-        logger.info(
-            "[transcribe] Extraction audio %.2fs → %.2fs", start_t, end_t
-        )
-
-        audio_path = os.path.abspath(
-            os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
-        )
-
         ffmpeg_service.extract_audio(input_path, audio_path, start_t, end_t)
         if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
             raise HTTPException(
                 status_code=400,
                 detail="L'extraction audio a généré un fichier vide.",
             )
+        return whisper_service.transcribe(audio_path, quality, vocabulary)
+    finally:
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
 
-        words = whisper_service.transcribe(audio_path)
 
-        text = _words_to_text(words)
-        logger.info("[transcribe] %d mot(s) transcrit(s).", len(words))
-        print(f"[transcribe] {len(words)} mot(s) transcrit(s).")
-        return {
-            "status": "success",
-            "text": text,
-            "words": words,
-            "word_count": len(words),
-            "whisper": whisper_service.get_runtime_config(),
-        }
-    except HTTPException as http_ex:
-        raise http_ex
+def _transcribe_request(request: TranscribeRequest) -> Dict[str, Any]:
+    """Transcribe the requested range; raise HTTPException on bad input."""
+    input_path = _resolve_input_path(request.file_id, request.video_path)
+    logger.info("[transcribe] Fichier source : %s", input_path)
+    print(f"[transcribe] Fichier source : {input_path}")
+
+    # Explicit float coercion — the payload may send strings or 0.
+    start_t = float(request.start_time or 0.0)
+    end_t = float(request.end_time) if request.end_time else None
+    duration = ffmpeg_service.get_duration(input_path)
+
+    # Default to the full media duration when end_time is missing/zero.
+    if end_t is None or end_t <= start_t:
+        end_t = duration
+    if end_t <= start_t:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Plage temporelle invalide : start_time={start_t}, end_time={end_t}.",
+        )
+
+    if duration <= FULL_TRANSCRIPT_MAX_DURATION:
+        # Short source: transcribe it whole once (cached), then slice.
+        # Changing the trim or picking a moment is then instant.
+        file_id = os.path.splitext(os.path.basename(input_path))[0]
+        transcript = moment_finder.get_transcript(
+            file_id, input_path, request.quality, request.vocabulary
+        )
+        words = moment_finder.clip_words(transcript["words"], start_t, end_t)
+    else:
+        words = _transcribe_segment(
+            input_path, start_t, end_t, request.quality, request.vocabulary
+        )
+
+    logger.info("[transcribe] %d mot(s) transcrit(s).", len(words))
+    print(f"[transcribe] {len(words)} mot(s) transcrit(s).")
+    return {
+        "status": "success",
+        "text": _words_to_text(words),
+        "words": words,
+        "word_count": len(words),
+        "whisper": whisper_service.get_runtime_config(),
+    }
+
+
+@router.post("/transcribe")
+def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
+    """Synchronous transcription (kept for API clients; the UI uses jobs)."""
+    try:
+        return _transcribe_request(request)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("[ERROR /api/transcribe] Traceback backend :\n%s", traceback.format_exc())
-        print("\n[ERROR /api/transcribe] Traceback backend :")
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur serveur transcription: {str(e)}",
-        )
-    finally:
-        if audio_path and os.path.exists(audio_path):
-            os.remove(audio_path)
+        raise HTTPException(status_code=500, detail=f"Erreur serveur transcription: {str(e)}")
+
+
+def _transcribe_job(job_id: str, request: TranscribeRequest) -> None:
+    job_store.update(job_id, status="processing", progress=10)
+    try:
+        result = _transcribe_request(request)
+        job_store.update(job_id, status="completed", progress=100, result=result)
+    except HTTPException as e:
+        job_store.update(job_id, status="failed", error=str(e.detail))
+    except Exception as e:
+        logger.error("[transcribe-job] Échec :\n%s", traceback.format_exc())
+        job_store.update(job_id, status="failed", error=f"Erreur de transcription : {e}")
+
+
+@router.post("/transcribe/start")
+async def start_transcription(
+    request: TranscribeRequest, background_tasks: BackgroundTasks
+) -> Dict[str, str]:
+    """Run the transcription in the background; poll /api/status/{job_id}.
+
+    A long-held HTTP request dies when a phone locks or a tab goes to the
+    background; a job keeps running and the page just picks the result up.
+    """
+    job_id = str(uuid.uuid4())
+    job_store.create(job_id, "transcribe", request.model_dump())
+    background_tasks.add_task(_transcribe_job, job_id, request)
+    return {"job_id": job_id}

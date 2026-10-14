@@ -48,6 +48,8 @@ interface PreviewPlayerProps {
   src: string | null
   selectedFilter: string
   aspectRatio?: AspectRatio
+  /** 9:16 framing, 0 = whole frame (blurred bars) … 100 = filled. */
+  zoom?: number
   startTime?: number
   endTime?: number
   onTimeUpdate?: (time: number) => void
@@ -65,6 +67,7 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
       src,
       selectedFilter,
       aspectRatio = "9:16",
+      zoom,
       startTime = 0,
       endTime,
       onTimeUpdate,
@@ -78,7 +81,45 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
     ref
   ) {
     const videoRef = React.useRef<HTMLVideoElement>(null)
+    const blurRef = React.useRef<HTMLCanvasElement>(null)
     const [isPlaying, setIsPlaying] = React.useState(false)
+    const [videoAspect, setVideoAspect] = React.useState(16 / 9)
+
+    // Same maths as backend _build_vertical_filter: the visible slice of the
+    // source width goes from 100 % (zoom 0) to the 9:16 fill (zoom 100).
+    const isVertical = aspectRatio.startsWith("9:16")
+    const effectiveZoom = zoom ?? (aspectRatio === "9:16_fit" ? 0 : 100)
+    const fillFraction = Math.min(1, (9 / 16) / videoAspect)
+    const t = effectiveZoom / 100
+    const visibleFraction = (1 - t) + t * fillFraction
+    const videoScale = isVertical ? 1 / visibleFraction : 1
+
+    // Blurred backdrop for the bars, redrawn from the video (~12 fps).
+    React.useEffect(() => {
+      if (!isVertical) return
+      const video = videoRef.current
+      const canvas = blurRef.current
+      const ctx = canvas?.getContext("2d")
+      if (!video || !canvas || !ctx) return
+      let frame = 0
+      let last = 0
+      const draw = (now: number) => {
+        if (now - last > 80 && video.readyState >= 2) {
+          last = now
+          const scale = Math.max(canvas.width / video.videoWidth, canvas.height / video.videoHeight)
+          const w = video.videoWidth * scale
+          const h = video.videoHeight * scale
+          try {
+            ctx.drawImage(video, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h)
+          } catch {
+            // Cross-origin frame: leave the black background.
+          }
+        }
+        frame = requestAnimationFrame(draw)
+      }
+      frame = requestAnimationFrame(draw)
+      return () => cancelAnimationFrame(frame)
+    }, [isVertical, src])
 
     const seek = React.useCallback(
       (time: number) => {
@@ -141,6 +182,15 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
           className="relative overflow-hidden rounded-lg bg-black"
           style={{ width: size.width, height: size.height, maxWidth: "100%" }}
         >
+          {src && isVertical && (
+            <canvas
+              ref={blurRef}
+              width={54}
+              height={96}
+              className="absolute inset-0 h-full w-full scale-110 blur-md"
+              aria-hidden
+            />
+          )}
           {src ? (
             <video
               ref={videoRef}
@@ -149,14 +199,17 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
               preload="metadata"
               crossOrigin="anonymous"
               className={cn(
-                "h-full w-full",
-                aspectRatio === "9:16_fit" ? "object-contain" : "object-cover"
+                "relative h-full w-full transition-transform",
+                isVertical ? "object-contain" : "object-cover"
               )}
-              style={FILTER_STYLES[selectedFilter] ?? {}}
+              style={{ ...(FILTER_STYLES[selectedFilter] ?? {}), transform: `scale(${videoScale})` }}
               onLoadedMetadata={() => {
                 const video = videoRef.current
                 if (!video) return
                 video.currentTime = startTime
+                if (video.videoWidth && video.videoHeight) {
+                  setVideoAspect(video.videoWidth / video.videoHeight)
+                }
                 if (video.duration && onLoadedDuration) {
                   onLoadedDuration(video.duration)
                 }

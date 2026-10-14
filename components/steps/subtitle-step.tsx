@@ -9,7 +9,9 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { PreviewPlayer, type AspectRatio, type VideoFilter } from "@/components/preview-player"
 import { cn } from "@/lib/utils"
-import { SUBTITLE_STYLES, type SubtitleStyle, type TranscriptWord } from "@/lib/presets"
+import { SUBTITLE_STYLES, type SubtitleStyle, type TranscriptWord, type WhisperQuality } from "@/lib/presets"
+import { Input } from "@/components/ui/input"
+import { pollJob, postJson } from "@/lib/jobs"
 
 interface SubtitleStepProps {
   fileId: string | null;
@@ -21,6 +23,11 @@ interface SubtitleStepProps {
   subtitleStyle: SubtitleStyle;
   videoFilter: VideoFilter;
   aspectRatio: AspectRatio;
+  zoom: number;
+  whisperQuality: WhisperQuality;
+  vocabulary: string;
+  onWhisperQualityChange: (quality: WhisperQuality) => void;
+  onVocabularyChange: (vocabulary: string) => void;
   customSubtitles: string;
   onToggle: (enabled: boolean) => void;
   onStyleChange: (style: SubtitleStyle) => void;
@@ -30,7 +37,11 @@ interface SubtitleStepProps {
 }
 
 const MAX_WORDS_PER_LINE = 4
-const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000
+interface TranscribeJob {
+  status: "queued" | "processing" | "completed" | "failed"
+  error: string | null
+  result: { text: string; words: TranscriptWord[] } | null
+}
 
 function normalizeSubtitleText(text: string): string {
   const words = text.split(/\s+/).filter(Boolean)
@@ -51,6 +62,11 @@ export function SubtitleStep({
   subtitleStyle,
   videoFilter,
   aspectRatio,
+  zoom,
+  whisperQuality,
+  vocabulary,
+  onWhisperQualityChange,
+  onVocabularyChange,
   customSubtitles,
   onToggle,
   onStyleChange,
@@ -61,58 +77,65 @@ export function SubtitleStep({
   const [transcribeError, setTranscribeError] = React.useState<string | null>(null)
   const [applied, setApplied] = React.useState(false)
 
+  const stopPolling = React.useRef<(() => void) | null>(null)
+  const [elapsed, setElapsed] = React.useState(0)
+
+  React.useEffect(() => () => stopPolling.current?.(), [])
+
+  // Elapsed-time counter so a long transcription visibly progresses.
+  React.useEffect(() => {
+    if (!loadingTranscribe) return
+    setElapsed(0)
+    const started = Date.now()
+    const timer = window.setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000)
+    return () => window.clearInterval(timer)
+  }, [loadingTranscribe])
+
+  // Runs as a backend job polled every 2 s: unlike one long request, it
+  // survives a locked phone or a background tab.
   const fetchTranscription = async () => {
     if (!fileId && !videoPath) return
+    stopPolling.current?.()
     setLoadingTranscribe(true)
     setTranscribeError(null)
     setApplied(false)
-    const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => {
-      controller.abort()
-    }, TRANSCRIBE_TIMEOUT_MS)
     const selectedStart = Number(startTime) || 0
     const selectedEnd =
       Number(endTime) > selectedStart ? Number(endTime) : selectedStart + 30
 
-    try {
-      const res = await fetch("/api/transcribe", {
-        method: "POST",
-        signal: controller.signal,
-        cache: "no-store",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          file_id: fileId || "",
-          video_path: videoPath || "",
-          start_time: selectedStart,
-          end_time: selectedEnd,
-        }),
-      })
-      const contentType = res.headers.get("content-type")
-      if (!contentType || !contentType.includes("application/json")) {
-        const rawText = await res.text()
-        console.error("[ClipFlow] Réponse brute non-JSON du serveur :", rawText)
-        throw new Error("Le serveur a renvoyé une erreur HTML au lieu d'un JSON.")
-      }
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.detail || "Erreur lors de la génération des sous-titres.")
-      }
-      onCustomSubtitlesChange(normalizeSubtitleText(data.text || ""))
-      onTranscriptChange(Array.isArray(data.words) ? data.words : null)
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") {
-        setTranscribeError(
-          "La transcription prend plus de 5 minutes. Relancez avec un extrait plus court ou un modèle Whisper plus léger."
-        )
-      } else {
-        setTranscribeError(e instanceof Error ? e.message : "Erreur inconnue")
-      }
-    } finally {
-      window.clearTimeout(timeoutId)
+    const fail = (message: string) => {
+      setTranscribeError(message)
       setLoadingTranscribe(false)
     }
+
+    try {
+      const { job_id } = await postJson<{ job_id: string }>("/api/transcribe/start", {
+        file_id: fileId || "",
+        video_path: videoPath || "",
+        start_time: selectedStart,
+        end_time: selectedEnd,
+        quality: whisperQuality,
+        vocabulary: vocabulary || null,
+      })
+      stopPolling.current = pollJob<TranscribeJob>(
+        `/api/status/${job_id}`,
+        (job) => {
+          if (job.status === "completed" && job.result) {
+            onCustomSubtitlesChange(normalizeSubtitleText(job.result.text || ""))
+            onTranscriptChange(Array.isArray(job.result.words) ? job.result.words : null)
+            setLoadingTranscribe(false)
+          } else if (job.status === "failed") {
+            fail(job.error || "Erreur lors de la génération des sous-titres.")
+          }
+        },
+        (job) => job.status === "completed" || job.status === "failed",
+        fail
+      )
+    } catch (e) {
+      fail(e instanceof Error ? e.message : "Erreur inconnue")
+    }
   }
+
 
   const handleApply = () => {
     onCustomSubtitlesChange(normalizeSubtitleText(customSubtitles))
@@ -164,12 +187,13 @@ export function SubtitleStep({
             src={fileUrl}
             selectedFilter={videoFilter}
             aspectRatio={aspectRatio}
+            zoom={zoom}
             startTime={startTime}
             endTime={endTime}
             showControls={false}
             caption={
               <p className="text-xs text-muted-foreground">
-                Aperçu du cadrage {aspectRatio}, du filtre et du placement des sous-titres
+                Aperçu du cadrage, du filtre et du placement des sous-titres
               </p>
             }
           >
@@ -194,6 +218,47 @@ export function SubtitleStep({
               </span>
             </div>
           </PreviewPlayer>
+
+          <Card className="space-y-3 p-4">
+            <div className="space-y-2">
+              <Label htmlFor="vocabulary" className="text-base">
+                Mots à reconnaître
+              </Label>
+              <Input
+                id="vocabulary"
+                value={vocabulary}
+                onChange={(e) => onVocabularyChange(e.target.value)}
+                placeholder="Ex : Okito, Kinshasa, darksides, yankee"
+              />
+              <p className="text-xs text-muted-foreground">
+                Noms d&apos;artistes, lieux, argot : Whisper les écrira correctement.
+                Mémorisé pour les prochaines vidéos. Relancez la transcription après
+                l&apos;avoir modifié.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Transcription :</span>
+              <Button
+                size="sm"
+                variant={whisperQuality === "accurate" ? "secondary" : "ghost"}
+                onClick={() => onWhisperQualityChange("accurate")}
+              >
+                Précise
+              </Button>
+              <Button
+                size="sm"
+                variant={whisperQuality === "fast" ? "secondary" : "ghost"}
+                onClick={() => onWhisperQualityChange("fast")}
+              >
+                Rapide
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {whisperQuality === "accurate"
+                  ? "Meilleure sur le rap et l'argot, ~3× plus lente."
+                  : "Plus rapide, plus d'erreurs sur les paroles chantées."}
+              </span>
+            </div>
+          </Card>
 
           <Card className="space-y-3 p-4">
             <div className="flex items-center justify-between">
@@ -249,7 +314,7 @@ export function SubtitleStep({
             {loadingTranscribe && (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Whisper analyse l&apos;audio de l&apos;extrait. Cela peut prendre quelques minutes sur CPU.
+                {elapsed} s — Whisper transcrit la vidéo ({whisperQuality === "accurate" ? "mode précis : environ la moitié de sa durée" : "mode rapide : environ un quart de sa durée"} sur CPU). Vous pouvez quitter la page ou verrouiller le téléphone : le résultat vous attend.
               </p>
             )}
             {transcribeError && (

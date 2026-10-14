@@ -4,11 +4,14 @@ import * as React from "react"
 import { Smartphone, Square, Monitor, Dices, Loader2, Palette, Sparkles, ScanFace } from "lucide-react"
 import { DualRangeSlider } from "@/components/ui/dual-range-slider"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Slider } from "@/components/ui/slider"
+import { Switch } from "@/components/ui/switch"
 import { Card } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PreviewPlayer, type AspectRatio, type PreviewPlayerHandle, type VideoFilter } from "@/components/preview-player"
 import { cn } from "@/lib/utils"
-import { CLIP_DURATIONS, VIDEO_FILTERS, type Moment } from "@/lib/presets"
+import { CLIP_DURATIONS, VIDEO_FILTERS, type Moment, type WhisperQuality } from "@/lib/presets"
 import { pollJob, postJson } from "@/lib/jobs"
 
 interface TrimStepProps {
@@ -18,7 +21,11 @@ interface TrimStepProps {
   startTime: number;
   endTime: number;
   aspectRatio: AspectRatio;
+  zoom: number;
+  whisperQuality: WhisperQuality;
+  vocabulary: string;
   videoFilter: VideoFilter;
+  onZoomChange: (zoom: number) => void;
   onTrimChange: (start: number, end: number) => void;
   onAspectRatioChange: (ratio: AspectRatio) => void;
   onVideoFilterChange: (filter: VideoFilter) => void;
@@ -26,6 +33,9 @@ interface TrimStepProps {
   /** Apply a best moment: trim + its already-timed transcript. */
   onSelectMoment: (moment: Moment) => void;
 }
+
+const zoomLabel = (zoom: number) =>
+  zoom === 0 ? "Vidéo entière" : zoom === 100 ? "Plein écran" : `Zoom ${zoom} %`
 
 interface AnalyzeJob {
   status: "queued" | "processing" | "completed" | "failed"
@@ -41,7 +51,11 @@ export function TrimStep({
   startTime,
   endTime,
   aspectRatio,
+  zoom,
+  whisperQuality,
+  vocabulary,
   videoFilter,
+  onZoomChange,
   onTrimChange,
   onAspectRatioChange,
   onVideoFilterChange,
@@ -49,6 +63,7 @@ export function TrimStep({
   onSelectMoment,
 }: TrimStepProps) {
   const playerRef = React.useRef<PreviewPlayerHandle>(null)
+  const isVertical = aspectRatio.startsWith("9:16")
   const [currentTime, setCurrentTime] = React.useState(startTime)
   const [randomRange, setRandomRange] = React.useState(0)
   const [randomLoading, setRandomLoading] = React.useState(false)
@@ -68,6 +83,7 @@ export function TrimStep({
     try {
       const { job_id } = await postJson<{ job_id: string }>("/api/analyze", {
         file_id: fileId, count: 5, min_duration: range.min, max_duration: range.max,
+        quality: whisperQuality, vocabulary: vocabulary || null,
       })
       stopPolling.current = pollJob<AnalyzeJob>(
         `/api/status/${job_id}`,
@@ -131,6 +147,7 @@ export function TrimStep({
           src={fileUrl}
           selectedFilter={videoFilter}
           aspectRatio={aspectRatio}
+          zoom={zoom}
           startTime={startTime}
           endTime={endTime}
           onTimeUpdate={setCurrentTime}
@@ -142,7 +159,7 @@ export function TrimStep({
           }}
           caption={
             <p className="text-center text-xs text-muted-foreground">
-              Aperçu du cadrage {aspectRatio} et du filtre appliqué
+              Aperçu du cadrage et du filtre appliqué
             </p>
           }
         />
@@ -256,47 +273,18 @@ export function TrimStep({
 
       <div className="space-y-4">
         <h3 className="font-semibold">Format</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <Card
             className={cn(
               "cursor-pointer p-4 transition-colors hover:bg-accent",
-              aspectRatio === "9:16_fit" && "border-primary bg-primary/5"
+              isVertical && "border-primary bg-primary/5"
             )}
-            onClick={() => onAspectRatioChange("9:16_fit")}
+            onClick={() => !isVertical && onAspectRatioChange("9:16_fit")}
           >
             <div className="flex flex-col items-center space-y-2 text-center">
               <Smartphone className="h-8 w-8" />
               <div className="text-sm font-medium">Reels / TikTok</div>
-              <div className="text-xs text-muted-foreground">9:16 — Vidéo entière</div>
-              <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                Recommandé
-              </span>
-            </div>
-          </Card>
-          <Card
-            className={cn(
-              "cursor-pointer p-4 transition-colors hover:bg-accent",
-              aspectRatio === "9:16_face" && "border-primary bg-primary/5"
-            )}
-            onClick={() => onAspectRatioChange("9:16_face")}
-          >
-            <div className="flex flex-col items-center space-y-2 text-center">
-              <ScanFace className="h-8 w-8" />
-              <div className="text-sm font-medium">Reels / TikTok</div>
-              <div className="text-xs text-muted-foreground">9:16 — Suit le visage</div>
-            </div>
-          </Card>
-          <Card
-            className={cn(
-              "cursor-pointer p-4 transition-colors hover:bg-accent",
-              aspectRatio === "9:16" && "border-primary bg-primary/5"
-            )}
-            onClick={() => onAspectRatioChange("9:16")}
-          >
-            <div className="flex flex-col items-center space-y-2 text-center">
-              <Smartphone className="h-8 w-8" />
-              <div className="text-sm font-medium">Reels / TikTok</div>
-              <div className="text-xs text-muted-foreground">9:16 — Crop centré</div>
+              <div className="text-xs text-muted-foreground">9:16</div>
             </div>
           </Card>
           <Card
@@ -326,6 +314,46 @@ export function TrimStep({
             </div>
           </Card>
         </div>
+
+        {isVertical && (
+          <Card className="space-y-4 p-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <Label>Cadrage</Label>
+                <span className="font-mono text-xs text-muted-foreground">{zoomLabel(zoom)}</span>
+              </div>
+              <Slider
+                min={0}
+                max={100}
+                step={5}
+                value={[zoom]}
+                onValueChange={(val) => onZoomChange(val[0])}
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Vidéo entière (rien n&apos;est coupé)</span>
+                <span>Plein écran (bords coupés)</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="follow-face"
+                checked={aspectRatio === "9:16_face"}
+                onCheckedChange={(on) => {
+                  onAspectRatioChange(on ? "9:16_face" : "9:16_fit")
+                  // Following a face needs room to move: zoom in a bit.
+                  if (on && zoom < 30) onZoomChange(60)
+                }}
+              />
+              <Label htmlFor="follow-face" className="flex items-center gap-2 text-sm font-normal">
+                <ScanFace className="h-4 w-4" />
+                Suivre le visage
+                <span className="text-xs text-muted-foreground">
+                  (appliqué au rendu ; l&apos;aperçu reste centré)
+                </span>
+              </Label>
+            </div>
+          </Card>
+        )}
       </div>
 
       <div className="space-y-3">

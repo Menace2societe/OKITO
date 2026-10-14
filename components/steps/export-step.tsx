@@ -188,6 +188,9 @@ export function ExportStep(props: ExportStepProps) {
         <BatchPanel
           fileId={props.fileId}
           aspectRatio={aspectRatio}
+          zoom={props.zoom}
+          whisperQuality={props.whisperQuality}
+          vocabulary={props.vocabulary}
           subtitlesEnabled={subtitlesEnabled}
           subtitleStyle={subtitleStyle}
           videoFilter={videoFilter}

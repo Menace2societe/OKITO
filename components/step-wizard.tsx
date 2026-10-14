@@ -11,6 +11,7 @@ import { TrimStep } from "@/components/steps/trim-step"
 import { SubtitleStep } from "@/components/steps/subtitle-step"
 import { ExportStep } from "@/components/steps/export-step"
 import type { AspectRatio } from "@/components/preview-player"
+import { pollJob } from "@/lib/jobs"
 import {
   SUBTITLE_STYLES,
   VIDEO_FILTERS,
@@ -19,7 +20,20 @@ import {
   type SubtitleStyle,
   type TranscriptWord,
   type VideoFilter,
+  type WhisperQuality,
 } from "@/lib/presets"
+
+interface RenderJob {
+  status: "queued" | "processing" | "completed" | "failed"
+  progress: number
+  output_url: string | null
+  vtt_url: string | null
+  srt_url: string | null
+  error: string | null
+}
+
+// Per-viewer preferences kept between sessions (best effort).
+const PREFS_KEY = "clipflow:transcription"
 
 export interface ProjectState {
   fileId: string | null;
@@ -30,6 +44,9 @@ export interface ProjectState {
   startTime: number;
   endTime: number;
   aspectRatio: AspectRatio;
+  zoom: number;
+  whisperQuality: WhisperQuality;
+  vocabulary: string;
   subtitlesEnabled: boolean;
   subtitleStyle: SubtitleStyle;
   customSubtitles: string;
@@ -76,6 +93,9 @@ const INITIAL_STATE: ProjectState = {
   startTime: 0,
   endTime: 0,
   aspectRatio: "9:16_fit",
+  zoom: 0,
+  whisperQuality: "accurate",
+  vocabulary: "",
   subtitlesEnabled: false,
   subtitleStyle: "bold_tiktok",
   customSubtitles: "",
@@ -94,18 +114,46 @@ export default function StepWizard() {
     setState((prev) => ({ ...prev, ...updates }))
   }
 
+  // Vocabulary and quality are the same from one video to the next.
+  React.useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}")
+      updateState({
+        vocabulary: typeof saved.vocabulary === "string" ? saved.vocabulary : "",
+        whisperQuality: saved.whisperQuality === "fast" ? "fast" : "accurate",
+      })
+    } catch {
+      // Storage unavailable: keep defaults.
+    }
+  }, [])
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(
+        PREFS_KEY,
+        JSON.stringify({ vocabulary: state.vocabulary, whisperQuality: state.whisperQuality })
+      )
+    } catch {
+      // Storage unavailable: preferences just won't persist.
+    }
+  }, [state.vocabulary, state.whisperQuality])
+
   const handleNext = () => setCurrentStep((p) => Math.min(STEPS.length - 1, p + 1))
   const handleBack = () => setCurrentStep((p) => Math.max(0, p - 1))
 
   const handleResetToHome = () => {
-    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current?.()
     setCurrentStep(0)
-    setState(INITIAL_STATE)
+    setState((prev) => ({
+      ...INITIAL_STATE,
+      vocabulary: prev.vocabulary,
+      whisperQuality: prev.whisperQuality,
+    }))
   }
 
   // Keep the file, clear the finished job and go back to Trim for another clip.
   const handleNewClip = () => {
-    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current?.()
     updateState(JOB_RESET)
     setCurrentStep(1)
   }
@@ -150,17 +198,17 @@ export default function StepWizard() {
     return true
   }
 
-  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollRef = React.useRef<(() => void) | null>(null)
 
   // Cleanup polling on unmount
   React.useEffect(() => {
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+      pollRef.current?.()
     }
   }, [])
 
   const handleProcess = async () => {
-    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current?.()
     updateState({ jobStatus: "processing", jobProgress: 0, errorMessage: null })
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => {
@@ -183,6 +231,9 @@ export default function StepWizard() {
           custom_subtitles: state.customSubtitles.trim() ? state.customSubtitles : null,
           reference_words: state.customSubtitles.trim() ? state.transcriptWords : null,
           video_filter: state.videoFilter,
+          zoom: state.aspectRatio.startsWith("9:16") ? state.zoom : null,
+          quality: state.whisperQuality,
+          vocabulary: state.vocabulary || null,
           output_format: state.outputFormat,
         }),
       })
@@ -203,36 +254,29 @@ export default function StepWizard() {
 
       updateState({ jobId: data.job_id })
 
-      // Poll for status
-      pollRef.current = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`/api/status/${data.job_id}`)
-          const statusData = await statusRes.json()
-          updateState({ jobProgress: statusData.progress || 0 })
-
-          if (statusData.status === "completed") {
-            if (pollRef.current) clearInterval(pollRef.current)
+      // Poll for status (tolerates network blips, e.g. a phone waking up)
+      pollRef.current = pollJob<RenderJob>(
+        `/api/status/${data.job_id}`,
+        (job) => {
+          if (job.status === "completed") {
             updateState({
               jobStatus: "completed",
               jobProgress: 100,
-              outputUrl: statusData.output_url,
-              vttUrl: statusData.vtt_url || null,
-              srtUrl: statusData.srt_url || null,
+              outputUrl: job.output_url,
+              vttUrl: job.vtt_url || null,
+              srtUrl: job.srt_url || null,
             })
-          } else if (statusData.status === "failed") {
-            if (pollRef.current) clearInterval(pollRef.current)
-            const errMsg = statusData.error || "Erreur inconnue lors du traitement"
+          } else if (job.status === "failed") {
+            const errMsg = job.error || "Erreur inconnue lors du traitement"
             console.error("[ClipFlow] Traitement échoué :", errMsg)
             updateState({ jobStatus: "error", errorMessage: errMsg })
+          } else {
+            updateState({ jobProgress: job.progress || 0 })
           }
-        } catch {
-          if (pollRef.current) clearInterval(pollRef.current)
-          updateState({
-            jobStatus: "error",
-            errorMessage: "Connexion perdue avec le serveur",
-          })
-        }
-      }, 2000)
+        },
+        (job) => job.status === "completed" || job.status === "failed",
+        (message) => updateState({ jobStatus: "error", errorMessage: message })
+      )
     } catch (e) {
       window.clearTimeout(timeoutId)
       const msg =
@@ -333,7 +377,11 @@ export default function StepWizard() {
             startTime={state.startTime}
             endTime={state.endTime}
             aspectRatio={state.aspectRatio}
+            zoom={state.zoom}
+            whisperQuality={state.whisperQuality}
+            vocabulary={state.vocabulary}
             videoFilter={state.videoFilter}
+            onZoomChange={(zoom) => updateState({ zoom })}
             onTrimChange={handleTrimChange}
             onAspectRatioChange={(ratio) => updateState({ aspectRatio: ratio })}
             onVideoFilterChange={(filter) => updateState({ videoFilter: filter })}
@@ -353,6 +401,11 @@ export default function StepWizard() {
             subtitleStyle={state.subtitleStyle}
             videoFilter={state.videoFilter}
             aspectRatio={state.aspectRatio}
+            zoom={state.zoom}
+            whisperQuality={state.whisperQuality}
+            vocabulary={state.vocabulary}
+            onWhisperQualityChange={(whisperQuality) => updateState({ whisperQuality })}
+            onVocabularyChange={(vocabulary) => updateState({ vocabulary })}
             customSubtitles={state.customSubtitles}
             onToggle={(enabled) => updateState({ subtitlesEnabled: enabled })}
             onStyleChange={(style) => updateState({ subtitleStyle: style })}

@@ -38,7 +38,8 @@ const PICKED_BY_LABEL = {
 
 type BatchPanelProps = Pick<
   ProjectState,
-  "fileId" | "aspectRatio" | "subtitlesEnabled" | "subtitleStyle" | "videoFilter" | "outputFormat"
+  | "fileId" | "aspectRatio" | "zoom" | "subtitlesEnabled" | "subtitleStyle" | "videoFilter"
+  | "outputFormat" | "whisperQuality" | "vocabulary"
 >
 
 export function BatchPanel(props: BatchPanelProps) {
@@ -67,6 +68,9 @@ export function BatchPanel(props: BatchPanelProps) {
         min_duration: CLIP_DURATIONS[range].min,
         max_duration: CLIP_DURATIONS[range].max,
         aspect_ratio: props.aspectRatio,
+        zoom: props.aspectRatio.startsWith("9:16") ? props.zoom : null,
+        quality: props.whisperQuality,
+        vocabulary: props.vocabulary || null,
         subtitles_enabled: props.subtitlesEnabled,
         style_preset: props.subtitleStyle,
         video_filter: props.videoFilter,
@@ -95,7 +99,7 @@ export function BatchPanel(props: BatchPanelProps) {
           Plusieurs clips en un lancement
         </h3>
         <p className="text-sm text-muted-foreground">
-          Génère une série de clips de cette vidéo avec le format {props.aspectRatio}
+          Génère une série de clips de cette vidéo avec le cadrage choisi
           {props.subtitlesEnabled ? " et des sous-titres" : ""}.
         </p>
       </div>

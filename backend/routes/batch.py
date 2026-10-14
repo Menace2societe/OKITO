@@ -3,7 +3,7 @@ import logging
 import random
 import traceback
 import uuid
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
@@ -24,6 +24,8 @@ class AnalyzeRequest(BaseModel):
     count: int = Field(5, ge=1, le=20)
     min_duration: float = Field(15.0, gt=0)
     max_duration: float = Field(60.0, gt=0)
+    quality: str = "accurate"
+    vocabulary: Optional[str] = None
 
 
 class BatchRequest(AnalyzeRequest):
@@ -33,6 +35,7 @@ class BatchRequest(AnalyzeRequest):
     style_preset: str = "bold_tiktok"
     video_filter: str = "cinema_intense"
     output_format: str = "mp4"
+    zoom: Optional[float] = Field(None, ge=0, le=100)
     # Draw a different filter + subtitle style for every clip.
     random_look: bool = False
 
@@ -59,6 +62,7 @@ def _analyze_task(job_id: str, request: AnalyzeRequest, source: str) -> None:
             request.file_id, source, request.count,
             request.min_duration, request.max_duration,
             progress=lambda p: job_store.update(job_id, progress=p),
+            quality=request.quality, vocabulary=request.vocabulary,
         )
         job_store.update(job_id, status="completed", progress=100, result=result)
     except Exception as exc:
@@ -88,6 +92,7 @@ def _batch_task(batch_id: str, request: BatchRequest, source: str) -> None:
                 request.file_id, source, request.count,
                 request.min_duration, request.max_duration,
                 progress=lambda p: job_store.update(batch_id, progress=p * 4 // 10),
+                quality=request.quality, vocabulary=request.vocabulary,
             )
             clips, picked_by = found["moments"], found["source"]
         else:
@@ -115,6 +120,9 @@ def _batch_task(batch_id: str, request: BatchRequest, source: str) -> None:
                 custom_subtitles=clip.get("text") if words else None,
                 reference_words=words,
                 output_format=request.output_format,
+                zoom=request.zoom,
+                quality=request.quality,
+                vocabulary=request.vocabulary,
             )
             job_id = str(uuid.uuid4())
             job_store.create(job_id, "render", render.model_dump(), batch_id=batch_id,

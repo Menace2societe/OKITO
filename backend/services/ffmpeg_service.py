@@ -7,16 +7,17 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 ASPECT_RATIOS = {
-    "9:16": "scale=-2:1920,crop=1080:1920",
-    # 9:16_fit keeps the full frame (no crop) and fills letterbox bars with a
-    # blurred copy of the video. The actual filter_complex is built in
-    # process_video() because it requires stream splitting.
-    "9:16_fit": None,
-    # 9:16_face follows the speaker's face; the crop x is driven over time by
-    # a sendcmd script built in process_video() (see face_tracker).
-    "9:16_face": None,
     "1:1": r"crop=min(iw\,ih):min(iw\,ih),scale=1080:1080",
     "16:9": "scale=1920:-2,crop=1920:1080"
+}
+
+# Vertical 9:16 modes, all rendered by _build_vertical_filter():
+#   (default zoom 0-100, follow the face?)
+# zoom 0 = whole frame on a blurred background, 100 = frame filled (cropped).
+VERTICAL_MODES = {
+    "9:16": (100.0, False),
+    "9:16_fit": (0.0, False),
+    "9:16_face": (100.0, True),
 }
 
 # Dynamic colour-grade filter chains selected from the frontend.
@@ -189,21 +190,38 @@ def _ass_path_for_ffmpeg(ass_path: str) -> str:
     return rel.replace("\\", "/")
 
 
-def _build_fit_blur_filter(
+def _even(value: float) -> int:
+    return max(2, int(round(value / 2)) * 2)
+
+
+def _build_vertical_filter(
+    crop_width: int,
+    crop_x: str,
     color_filter: Optional[str],
     ass_path: Optional[str],
+    face_cmd_path: Optional[str] = None,
 ) -> str:
-    """Build the -filter_complex string for 9:16_fit (fit + blur background).
+    """Build the -filter_complex string for every 9:16 mode.
 
     Graph:
-      [0:v] ─► scale-up + crop 1080×1920 ─► boxblur ─► [bg]
-      [0:v] ─► scale-down (fit inside 1080×1920) ─► [fg]
+      [0:v] ─► fill 1080×1920 ─► boxblur ─────────────────────► [bg]
+      [0:v] ─► (sendcmd) crop crop_width×ih at crop_x ─► 1080 wide ► [fg]
       [bg][fg] overlay centred ─► (colour grade) ─► (ass) ─► [out]
+
+    A narrow crop fills the frame (classic crop); the full width shows the
+    whole picture with blurred bars; anything between is a compromise.
     """
+    fg = "[0:v]"
+    crop_name = "crop"
+    if face_cmd_path:
+        fg += f"sendcmd=f={_ass_path_for_ffmpeg(face_cmd_path)},"
+        crop_name = "crop@face"
+    fg += f"{crop_name}={crop_width}:ih:{crop_x}:0,scale=1080:-2[fg]"
+
     parts = [
         "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,boxblur=20:5[bg]",
-        "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg]",
+        fg,
     ]
 
     # Post-overlay chain: colour grade, then ASS burn-in.
@@ -231,31 +249,35 @@ def process_video(
     aspect_ratio: str,
     ass_path: Optional[str] = None,
     video_filter: str = DEFAULT_VIDEO_FILTER,
+    zoom: Optional[float] = None,
 ) -> str:
-    """Trim, crop/fit, optionally colour-grade, burn subtitles, and encode."""
+    """Trim, frame, optionally colour-grade, burn subtitles, and encode.
+
+    `zoom` (0-100) only applies to 9:16 modes; None uses the mode's default.
+    """
     abs_input = os.path.abspath(input_path)
     abs_output = os.path.abspath(output_path)
 
-    use_filter_complex = (aspect_ratio == "9:16_fit")
+    vertical = VERTICAL_MODES.get(aspect_ratio)
     face_cmd_path: Optional[str] = None
-    framing = ASPECT_RATIOS.get(aspect_ratio) or ASPECT_RATIOS["16:9"]
+    crop_width = 0
+    crop_x = "(iw-ow)/2"
 
-    if aspect_ratio == "9:16_face":
-        # Imported lazily: OpenCV is only needed for this framing mode.
-        from backend.services import face_tracker
-
+    if vertical:
+        default_zoom, follow_face = vertical
+        t = min(100.0, max(0.0, default_zoom if zoom is None else zoom)) / 100
         width, height = get_video_size(abs_input)
-        scaled_width = int(round(width * 1920 / height / 2) * 2)
-        if scaled_width <= 1080:
-            # Source is already portrait: nothing to follow, keep it whole.
-            use_filter_complex = True
-        else:
+        fill_width = min(width, height * 9 / 16)  # crop that fills 9:16
+        crop_width = min(width, _even(width * (1 - t) + fill_width * t))
+
+        if follow_face and crop_width < width:
+            # Imported lazily: OpenCV is only needed for this framing mode.
+            from backend.services import face_tracker
+
             face_cmd_path = os.path.splitext(abs_output)[0] + "_face.cmd"
-            x0 = face_tracker.write_crop_commands(
-                abs_input, start_time, end_time, scaled_width, 1080, face_cmd_path
-            )
-            rel_cmd = _ass_path_for_ffmpeg(face_cmd_path)
-            framing = f"sendcmd=f={rel_cmd},scale=-2:1920,crop@face=1080:1920:{x0}:0"
+            crop_x = str(face_tracker.write_crop_commands(
+                abs_input, start_time, end_time, width, crop_width, face_cmd_path
+            ))
 
     color_filter = VIDEO_FILTERS.get(video_filter, VIDEO_FILTERS[DEFAULT_VIDEO_FILTER])
 
@@ -295,13 +317,12 @@ def process_video(
     ]
 
     if ext != ".mp3":
-        if use_filter_complex:
-            # 9:16_fit — full frame on blurred background via filter_complex
-            fc = _build_fit_blur_filter(color_filter, ass_path)
+        if vertical:
+            fc = _build_vertical_filter(crop_width, crop_x, color_filter, ass_path, face_cmd_path)
             cmd += ["-filter_complex", fc, "-map", "[out]", "-map", "0:a?"]
         else:
-            # Standard simple -vf pipeline (crop / scale)
-            vf_parts = [framing]
+            # Square / landscape: simple -vf pipeline (crop / scale)
+            vf_parts = [ASPECT_RATIOS.get(aspect_ratio, ASPECT_RATIOS["16:9"])]
             if color_filter:
                 vf_parts.append(color_filter)
             if ass_path:

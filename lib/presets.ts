@@ -13,6 +13,8 @@ export type VideoFilter =
 
 export type SubtitleStyle = "bold_tiktok" | "neon_yellow" | "impact_pop" | "minimal_clean"
 
+export type WhisperQuality = "accurate" | "fast"
+
 export interface TranscriptWord {
   text: string
   start: number

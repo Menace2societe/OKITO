@@ -172,6 +172,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 def _format_time(seconds: float) -> str:
+    seconds = max(0.0, seconds)  # a word may start just before the clip
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = seconds % 60
@@ -196,8 +197,11 @@ def _chunk_words(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 # Gaps shorter than this between two lines are bridged to avoid flicker.
 MAX_BRIDGED_GAP = 0.4
-# A line never stays on screen for less than this (seconds).
-MIN_LINE_DURATION = 0.3
+# A line stays on screen at least this long (seconds) when the next one
+# leaves room — Whisper often squeezes sung words into a few tenths of a second.
+MIN_LINE_DURATION = 0.9
+# After its last word, a line lingers this long if nothing follows right away.
+LINE_LINGER = 0.4
 
 
 def _remove_overlaps(lines: List[Dict[str, Any]]) -> None:
@@ -216,10 +220,16 @@ def _remove_overlaps(lines: List[Dict[str, Any]]) -> None:
         nxt_start = nxt_words[0]["start"]
         if cur_end > nxt_start or nxt_start - cur_end < MAX_BRIDGED_GAP:
             cur_words[-1]["end"] = max(cur_words[-1]["start"], nxt_start)
-    if lines and lines[-1].get("words"):
-        last = lines[-1]["words"][-1]
-        first = lines[-1]["words"][0]
-        last["end"] = max(last["end"], first["start"] + MIN_LINE_DURATION)
+    # Readability: extend short lines into the following pause, never past
+    # the start of the next line.
+    for i, line in enumerate(lines):
+        words = line.get("words") or []
+        if not words:
+            continue
+        nxt = next((l["words"] for l in lines[i + 1:] if l.get("words")), None)
+        limit = nxt[0]["start"] if nxt else float("inf")
+        wanted = max(words[-1]["end"] + LINE_LINGER, words[0]["start"] + MIN_LINE_DURATION)
+        words[-1]["end"] = max(words[-1]["end"], min(wanted, limit))
 
 
 def _escape_ass(text: str) -> str:
@@ -518,6 +528,7 @@ def generate_ass_from_custom(
 
 def _format_cue_time(seconds: float, decimal_sep: str) -> str:
     """HH:MM:SS.mmm (VTT) or HH:MM:SS,mmm (SRT)."""
+    seconds = max(0.0, seconds)  # a word may start just before the clip
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = seconds % 60
