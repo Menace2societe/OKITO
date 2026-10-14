@@ -26,6 +26,7 @@ class AnalyzeRequest(BaseModel):
     max_duration: float = Field(60.0, gt=0)
     quality: str = "accurate"
     vocabulary: Optional[str] = None
+    isolate_vocals: bool = True
 
 
 class BatchRequest(AnalyzeRequest):
@@ -63,6 +64,7 @@ def _analyze_task(job_id: str, request: AnalyzeRequest, source: str) -> None:
             request.min_duration, request.max_duration,
             progress=lambda p: job_store.update(job_id, progress=p),
             quality=request.quality, vocabulary=request.vocabulary,
+            isolate=request.isolate_vocals,
         )
         job_store.update(job_id, status="completed", progress=100, result=result)
     except Exception as exc:
@@ -93,6 +95,7 @@ def _batch_task(batch_id: str, request: BatchRequest, source: str) -> None:
                 request.min_duration, request.max_duration,
                 progress=lambda p: job_store.update(batch_id, progress=p * 4 // 10),
                 quality=request.quality, vocabulary=request.vocabulary,
+            isolate=request.isolate_vocals,
             )
             clips, picked_by = found["moments"], found["source"]
         else:
@@ -123,6 +126,7 @@ def _batch_task(batch_id: str, request: BatchRequest, source: str) -> None:
                 zoom=request.zoom,
                 quality=request.quality,
                 vocabulary=request.vocabulary,
+                isolate_vocals=request.isolate_vocals,
             )
             job_id = str(uuid.uuid4())
             job_store.create(job_id, "render", render.model_dump(), batch_id=batch_id,

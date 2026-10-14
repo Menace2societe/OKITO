@@ -9,3 +9,5 @@ opencv-python-headless>=4.10,<5
 numpy>=2.0
 # Optional: best-moment selection by Claude (falls back to local scoring without credentials)
 anthropic>=1.13
+# Vocal isolation before Whisper (optional; ~1 GB with PyTorch CPU)
+demucs>=4.1

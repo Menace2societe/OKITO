@@ -39,7 +39,7 @@ const PICKED_BY_LABEL = {
 type BatchPanelProps = Pick<
   ProjectState,
   | "fileId" | "aspectRatio" | "zoom" | "subtitlesEnabled" | "subtitleStyle" | "videoFilter"
-  | "outputFormat" | "whisperQuality" | "vocabulary"
+  | "outputFormat" | "whisperQuality" | "vocabulary" | "isolateVocals"
 >
 
 export function BatchPanel(props: BatchPanelProps) {
@@ -71,6 +71,7 @@ export function BatchPanel(props: BatchPanelProps) {
         zoom: props.aspectRatio.startsWith("9:16") ? props.zoom : null,
         quality: props.whisperQuality,
         vocabulary: props.vocabulary || null,
+        isolate_vocals: props.isolateVocals,
         subtitles_enabled: props.subtitlesEnabled,
         style_preset: props.subtitleStyle,
         video_filter: props.videoFilter,

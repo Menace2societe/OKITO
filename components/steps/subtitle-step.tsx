@@ -1,17 +1,18 @@
 "use client"
 
 import * as React from "react"
-import { Wand2, Loader2, Check, RefreshCcw } from "lucide-react"
+import { Wand2, Loader2, RefreshCcw, Play, BookPlus, ListChecks, Type } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { PreviewPlayer, type AspectRatio, type VideoFilter } from "@/components/preview-player"
+import { PreviewPlayer, type AspectRatio, type PreviewPlayerHandle, type VideoFilter } from "@/components/preview-player"
 import { cn } from "@/lib/utils"
 import { SUBTITLE_STYLES, type SubtitleStyle, type TranscriptWord, type WhisperQuality } from "@/lib/presets"
+import { MAX_WORDS_PER_LINE, lineRanges, linesFromText } from "@/lib/subtitles"
 import { Input } from "@/components/ui/input"
-import { pollJob, postJson } from "@/lib/jobs"
+import type { TranscriptionState } from "@/components/use-transcription"
 
 interface SubtitleStepProps {
   fileId: string | null;
@@ -29,27 +30,21 @@ interface SubtitleStepProps {
   onWhisperQualityChange: (quality: WhisperQuality) => void;
   onVocabularyChange: (vocabulary: string) => void;
   customSubtitles: string;
+  /** Clip-relative Whisper words behind the text (null for pasted text). */
+  transcriptWords: TranscriptWord[] | null;
+  isolateVocals: boolean;
+  onIsolateVocalsChange: (on: boolean) => void;
   onToggle: (enabled: boolean) => void;
   onStyleChange: (style: SubtitleStyle) => void;
   onCustomSubtitlesChange: (text: string) => void;
-  /** Whisper words (clip-relative) — kept so edits stay in sync with speech. */
-  onTranscriptChange: (words: TranscriptWord[] | null) => void;
+  transcription: TranscriptionState;
+  onTranscribe: () => void;
 }
 
-const MAX_WORDS_PER_LINE = 4
-interface TranscribeJob {
-  status: "queued" | "processing" | "completed" | "failed"
-  error: string | null
-  result: { text: string; words: TranscriptWord[] } | null
-}
-
-function normalizeSubtitleText(text: string): string {
-  const words = text.split(/\s+/).filter(Boolean)
-  const lines: string[] = []
-  for (let i = 0; i < words.length; i += MAX_WORDS_PER_LINE) {
-    lines.push(words.slice(i, i + MAX_WORDS_PER_LINE).join(" "))
-  }
-  return lines.join("\n")
+const formatClock = (seconds: number) => {
+  const m = Math.floor(seconds / 60)
+  const s = (seconds % 60).toFixed(1).padStart(4, "0")
+  return `${m}:${s}`
 }
 
 export function SubtitleStep({
@@ -68,99 +63,82 @@ export function SubtitleStep({
   onWhisperQualityChange,
   onVocabularyChange,
   customSubtitles,
+  transcriptWords,
+  isolateVocals,
+  onIsolateVocalsChange,
   onToggle,
   onStyleChange,
   onCustomSubtitlesChange,
-  onTranscriptChange,
+  transcription,
+  onTranscribe,
 }: SubtitleStepProps) {
-  const [loadingTranscribe, setLoadingTranscribe] = React.useState(false)
-  const [transcribeError, setTranscribeError] = React.useState<string | null>(null)
-  const [applied, setApplied] = React.useState(false)
-
-  const stopPolling = React.useRef<(() => void) | null>(null)
+  const playerRef = React.useRef<PreviewPlayerHandle>(null)
+  const [currentTime, setCurrentTime] = React.useState(startTime)
+  const [rawMode, setRawMode] = React.useState(false)
+  const loadingTranscribe = transcription.status === "running"
+  const transcribeError = transcription.status === "error" ? transcription.error : null
   const [elapsed, setElapsed] = React.useState(0)
-
-  React.useEffect(() => () => stopPolling.current?.(), [])
 
   // Elapsed-time counter so a long transcription visibly progresses.
   React.useEffect(() => {
-    if (!loadingTranscribe) return
-    setElapsed(0)
-    const started = Date.now()
-    const timer = window.setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000)
+    if (!transcription.startedAt) return
+    const tick = () => setElapsed(Math.round((Date.now() - transcription.startedAt!) / 1000))
+    tick()
+    const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
-  }, [loadingTranscribe])
+  }, [transcription.startedAt])
 
-  // Runs as a backend job polled every 2 s: unlike one long request, it
-  // survives a locked phone or a background tab.
-  const fetchTranscription = async () => {
-    if (!fileId && !videoPath) return
-    stopPolling.current?.()
-    setLoadingTranscribe(true)
-    setTranscribeError(null)
-    setApplied(false)
-    const selectedStart = Number(startTime) || 0
-    const selectedEnd =
-      Number(endTime) > selectedStart ? Number(endTime) : selectedStart + 30
+  const fetchTranscription = () => onTranscribe()
 
-    const fail = (message: string) => {
-      setTranscribeError(message)
-      setLoadingTranscribe(false)
-    }
+  // One editable row per subtitle line, each with the time it is sung at.
+  const lines = React.useMemo(() => customSubtitles.split("\n"), [customSubtitles])
+  const ranges = React.useMemo(
+    () => (transcriptWords?.length ? lineRanges(lines, transcriptWords) : lines.map(() => null)),
+    [lines, transcriptWords]
+  )
+  const lineEditor = !rawMode && !!transcriptWords?.length && customSubtitles.trim() !== ""
 
-    try {
-      const { job_id } = await postJson<{ job_id: string }>("/api/transcribe/start", {
-        file_id: fileId || "",
-        video_path: videoPath || "",
-        start_time: selectedStart,
-        end_time: selectedEnd,
-        quality: whisperQuality,
-        vocabulary: vocabulary || null,
-      })
-      stopPolling.current = pollJob<TranscribeJob>(
-        `/api/status/${job_id}`,
-        (job) => {
-          if (job.status === "completed" && job.result) {
-            onCustomSubtitlesChange(normalizeSubtitleText(job.result.text || ""))
-            onTranscriptChange(Array.isArray(job.result.words) ? job.result.words : null)
-            setLoadingTranscribe(false)
-          } else if (job.status === "failed") {
-            fail(job.error || "Erreur lors de la génération des sous-titres.")
-          }
-        },
-        (job) => job.status === "completed" || job.status === "failed",
-        fail
-      )
-    } catch (e) {
-      fail(e instanceof Error ? e.message : "Erreur inconnue")
-    }
+  const updateLine = (index: number, text: string) => {
+    const next = [...lines]
+    next[index] = text
+    onCustomSubtitlesChange(next.join("\n"))
   }
 
-
-  const handleApply = () => {
-    onCustomSubtitlesChange(normalizeSubtitleText(customSubtitles))
-    setApplied(true)
+  const playLine = (index: number) => {
+    const range = ranges[index]
+    if (!range) return
+    playerRef.current?.playRange(
+      Math.max(startTime, startTime + range.start - 0.15),
+      Math.min(endTime, startTime + range.end + 0.35)
+    )
   }
 
-  // Auto-load the initial transcription once, when subtitles are enabled and
-  // the field is still empty (e.g. arriving on the Subtitles step).
-  const autoLoadedSource = React.useRef<string | null>(null)
-  // Re-transcribe when the trim changes: the old text belongs to another segment.
-  const sourceKey = `${videoPath || fileId || ""}@${startTime}-${endTime}`
+  // Remember a corrected phrase so the next transcriptions get it right.
+  const addToVocabulary = (text: string) => {
+    const phrase = text.trim()
+    if (!phrase) return
+    const entries = vocabulary.split(",").map((v) => v.trim()).filter(Boolean)
+    if (entries.some((v) => v.toLowerCase() === phrase.toLowerCase())) return
+    onVocabularyChange([...entries, phrase].join(", ").slice(0, 300))
+  }
 
+  // Line shown on the preview while playing (clip-relative time).
+  const clipTime = currentTime - startTime
+  const activeLine = ranges.findIndex((r) => r && clipTime >= r.start && clipTime <= r.end + 0.3)
+
+  // Auto-load the transcription when subtitles are enabled and the field is
+  // still empty. The job lives in the wizard: leaving this step doesn't lose it.
   React.useEffect(() => {
     if (!subtitlesEnabled) return
     if (!videoPath && !fileId) return
     if (customSubtitles.trim()) return
-    if (loadingTranscribe) return
-    if (autoLoadedSource.current === sourceKey) return
-
-    autoLoadedSource.current = sourceKey
-    void fetchTranscription()
+    if (transcription.status !== "idle") return
+    onTranscribe()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subtitlesEnabled, sourceKey, customSubtitles, loadingTranscribe])
+  }, [subtitlesEnabled, fileId, videoPath, startTime, endTime, customSubtitles])
 
   const wordCount = customSubtitles.split(/\s+/).filter(Boolean).length
+  const vocabularyEntries = vocabulary.split(",").map((v) => v.trim().toLowerCase())
   const activePreset = SUBTITLE_STYLES.find((p) => p.value === subtitleStyle)
 
   return (
@@ -184,6 +162,8 @@ export function SubtitleStep({
       {subtitlesEnabled && (
         <div className="space-y-6 animate-in slide-in-from-top-4 fade-in-50">
           <PreviewPlayer
+            ref={playerRef}
+            onTimeUpdate={setCurrentTime}
             src={fileUrl}
             selectedFilter={videoFilter}
             aspectRatio={aspectRatio}
@@ -213,8 +193,14 @@ export function SubtitleStep({
                     "drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
                 )}
               >
-                Aperçu du{" "}
-                <span className={cn(activePreset?.highlightClass)}>sous-titre</span>
+                {activeLine >= 0 && lines[activeLine]?.trim() ? (
+                  lines[activeLine]
+                ) : (
+                  <>
+                    Aperçu du{" "}
+                    <span className={cn(activePreset?.highlightClass)}>sous-titre</span>
+                  </>
+                )}
               </span>
             </div>
           </PreviewPlayer>
@@ -258,6 +244,16 @@ export function SubtitleStep({
                   : "Plus rapide, plus d'erreurs sur les paroles chantées."}
               </span>
             </div>
+            <div className="flex items-center gap-3">
+              <Switch id="isolate-vocals" checked={isolateVocals} onCheckedChange={onIsolateVocalsChange} />
+              <Label htmlFor="isolate-vocals" className="text-sm font-normal">
+                Isoler la voix avant la transcription
+                <span className="block text-xs text-muted-foreground">
+                  Retire le beat (Demucs) pour que Whisper n&apos;entende que la voix. Recommandé
+                  pour le rap ; ajoute environ 1 min pour 2 min de vidéo.
+                </span>
+              </Label>
+            </div>
           </Card>
 
           <Card className="space-y-3 p-4">
@@ -269,25 +265,84 @@ export function SubtitleStep({
                 {wordCount} mot{wordCount > 1 ? "s" : ""} · {MAX_WORDS_PER_LINE} max/ligne
               </span>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Corrigez la transcription ou collez vos paroles. Le texte est
-              découpé en lignes de {MAX_WORDS_PER_LINE} mots. Les mots corrigés
-              gardent le timing de la voix détecté par Whisper ; un texte collé
-              sans transcription est réparti sur la durée de l&apos;extrait.
-            </p>
-            <textarea
-              id="custom-subtitles"
-              value={customSubtitles}
-              onChange={(e) => {
-                onCustomSubtitlesChange(e.target.value)
-                setApplied(false)
-              }}
-              rows={8}
-              placeholder={
-                "Collez ici vos paroles ou la transcription...\nEx : On arrive dans le game, personne ne peut nous stopper"
-              }
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            />
+            {lineEditor ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  ▶ rejoue la ligne pour l&apos;écouter, corrigez le texte directement :
+                  le timing de la voix est conservé. <BookPlus className="inline h-3 w-3" /> ajoute
+                  la phrase aux mots à reconnaître pour les prochaines vidéos.
+                </p>
+                <div className="max-h-96 space-y-1 overflow-y-auto pr-1">
+                  {lines.map((line, i) => {
+                    const range = ranges[i]
+                    const known = vocabularyEntries.includes(line.trim().toLowerCase())
+                    return (
+                      <div
+                        key={i}
+                        className={cn(
+                          "flex items-center gap-2 rounded-md px-1 py-0.5",
+                          i === activeLine && "bg-primary/10"
+                        )}
+                      >
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => playLine(i)}
+                          disabled={!range}
+                          title="Écouter cette ligne"
+                        >
+                          <Play className="h-4 w-4" />
+                        </Button>
+                        <span className="w-12 shrink-0 font-mono text-xs text-muted-foreground">
+                          {range ? formatClock(range.start) : "—"}
+                        </span>
+                        <Input
+                          value={line}
+                          onChange={(e) => updateLine(i, e.target.value)}
+                          className="h-8"
+                          aria-label={`Ligne ${i + 1}`}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => addToVocabulary(line)}
+                          disabled={!line.trim() || known}
+                          title={known ? "Déjà dans les mots à reconnaître" : "Ajouter aux mots à reconnaître"}
+                        >
+                          <BookPlus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Corrigez la transcription ou collez vos paroles. Les mots corrigés
+                  gardent le timing de la voix détecté par Whisper ; un texte collé
+                  sans transcription est réparti sur la durée de l&apos;extrait.
+                </p>
+                <textarea
+                  id="custom-subtitles"
+                  value={customSubtitles}
+                  onChange={(e) => onCustomSubtitlesChange(e.target.value)}
+                  onBlur={() => {
+                    // Pasted text without timings: show it as 4-word lines.
+                    if (!transcriptWords?.length && customSubtitles.trim()) {
+                      onCustomSubtitlesChange(linesFromText(customSubtitles))
+                    }
+                  }}
+                  rows={8}
+                  placeholder={
+                    "Collez ici vos paroles ou la transcription...\nEx : On arrive dans le game, personne ne peut nous stopper"
+                  }
+                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
@@ -305,16 +360,18 @@ export function SubtitleStep({
                   ? "Relancer la transcription"
                   : "Générer depuis l'audio"}
               </Button>
-              <Button onClick={handleApply} disabled={!customSubtitles.trim()}>
-                <Check className="mr-2 h-4 w-4" />
-                Appliquer / Régénérer les sous-titres
-              </Button>
+              {!!transcriptWords?.length && customSubtitles.trim() && (
+                <Button variant="ghost" onClick={() => setRawMode((v) => !v)}>
+                  {rawMode ? <ListChecks className="mr-2 h-4 w-4" /> : <Type className="mr-2 h-4 w-4" />}
+                  {rawMode ? "Éditeur ligne par ligne" : "Texte brut"}
+                </Button>
+              )}
             </div>
 
             {loadingTranscribe && (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                {elapsed} s — Whisper transcrit la vidéo ({whisperQuality === "accurate" ? "mode précis : environ la moitié de sa durée" : "mode rapide : environ un quart de sa durée"} sur CPU). Vous pouvez quitter la page ou verrouiller le téléphone : le résultat vous attend.
+                {elapsed} s — {isolateVocals ? "Isolation de la voix puis transcription" : "Transcription"} de la vidéo (la première fois, compter à peu près sa durée sur CPU). Vous pouvez passer à l&apos;étape suivante ou verrouiller le téléphone : le résultat vous attend.
               </p>
             )}
             {transcribeError && (
@@ -330,12 +387,6 @@ export function SubtitleStep({
                   <RefreshCcw className="mr-2 h-4 w-4" />
                   Relancer
                 </Button>
-              </div>
-            )}
-            {applied && !transcribeError && (
-              <div className="rounded-lg bg-green-600/15 p-3 text-sm text-green-700 border border-green-600/40">
-                Sous-titres appliqués : ils seront utilisés à la place de la
-                transcription Whisper lors du rendu.
               </div>
             )}
           </Card>

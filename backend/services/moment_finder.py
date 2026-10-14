@@ -19,8 +19,8 @@ from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 
 from backend.config import MEDIA_DIR
-from backend.services import ffmpeg_service, whisper_service
-from backend.services.subtitle_service import _sanitize_words
+from backend.services import ffmpeg_service, vocal_isolation, whisper_service
+from backend.services.subtitle_service import _sanitize_words, merge_fragments
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,7 @@ def get_transcript(
     input_path: str,
     quality: Optional[str] = None,
     vocabulary: Optional[str] = None,
+    isolate: bool = False,
 ) -> Dict[str, Any]:
     """Return {"duration", "words", "energy"} for the whole file, cached on disk.
 
@@ -69,16 +70,49 @@ def get_transcript(
     calls for one file wait for the first transcription instead of redoing it.
     """
     with _lock_for(file_id):
-        return _get_transcript_locked(file_id, input_path, quality, vocabulary)
+        return _get_transcript_locked(file_id, input_path, quality, vocabulary, isolate)
+
+
+def transcribe_range(
+    input_path: str, start: float, end: float,
+    quality: Optional[str], vocabulary: Optional[str], isolate: bool,
+) -> List[Dict[str, Any]]:
+    """Whisper words for [start, end] (relative to `start`).
+
+    With `isolate`, Demucs strips the beat first; if Demucs is missing or
+    fails, the original audio is transcribed instead of failing the job.
+    """
+    if isolate and vocal_isolation.is_available():
+        vocals = os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_vocals_transcribe.wav")
+        try:
+            vocal_isolation.isolate_vocals(input_path, start, end, vocals)
+            return whisper_service.transcribe(vocals, quality, vocabulary)
+        except Exception as exc:
+            logger.warning("[moments] Isolation de la voix impossible (%s) : audio d'origine.", exc)
+        finally:
+            if os.path.exists(vocals):
+                os.remove(vocals)
+    elif isolate:
+        logger.warning("[moments] Demucs absent : transcription de l'audio d'origine.")
+
+    audio_path = os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
+    try:
+        ffmpeg_service.extract_audio(input_path, audio_path, start, end)
+        return whisper_service.transcribe(audio_path, quality, vocabulary)
+    finally:
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
 
 
 def _get_transcript_locked(
-    file_id: str, input_path: str, quality: Optional[str], vocabulary: Optional[str]
+    file_id: str, input_path: str, quality: Optional[str], vocabulary: Optional[str],
+    isolate: bool,
 ) -> Dict[str, Any]:
     cache = _transcript_path(file_id)
     key = {
         "model": whisper_service.model_size_for(quality),
         "prompt": whisper_service.build_prompt(vocabulary),
+        "isolate": bool(isolate),
     }
     if os.path.exists(cache):
         with open(cache, encoding="utf-8") as f:
@@ -87,14 +121,17 @@ def _get_transcript_locked(
             return cached
 
     duration = ffmpeg_service.get_duration(input_path)
+    # Loudness is measured on the original mix (the beat matters there).
     audio_path = os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
     try:
         ffmpeg_service.extract_audio(input_path, audio_path, 0.0, duration)
         energy = _energy_per_second(audio_path)
-        words = _sanitize_words(whisper_service.transcribe(audio_path, quality, vocabulary))
     finally:
         if os.path.exists(audio_path):
             os.remove(audio_path)
+    words = _sanitize_words(
+        transcribe_range(input_path, 0.0, duration, quality, vocabulary, isolate)
+    )
 
     data = {
         **key,
@@ -305,6 +342,7 @@ def _rank_heuristic(
 
 def clip_words(words: List[Dict[str, Any]], start: float, end: float) -> List[Dict[str, Any]]:
     """Words inside [start, end], re-timed relative to the clip start."""
+    words = merge_fragments(words)
     return [
         {"text": w["text"], "start": round(max(0.0, w["start"] - start), 3),
          "end": round(max(0.0, w["end"] - start), 3)}
@@ -322,6 +360,7 @@ def find_moments(
     progress: Optional[ProgressFn] = None,
     quality: Optional[str] = None,
     vocabulary: Optional[str] = None,
+    isolate: bool = False,
 ) -> Dict[str, Any]:
     """Return {"source": "claude"|"heuristic", "moments": [...]}, best first.
 
@@ -330,7 +369,7 @@ def find_moments(
     """
     report = progress or (lambda _p: None)
     report(5)
-    transcript = get_transcript(file_id, input_path, quality, vocabulary)
+    transcript = get_transcript(file_id, input_path, quality, vocabulary, isolate)
     report(70)
     words = transcript["words"]
     segments = _segments(words)

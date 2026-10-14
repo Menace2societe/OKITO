@@ -24,6 +24,7 @@ interface TrimStepProps {
   zoom: number;
   whisperQuality: WhisperQuality;
   vocabulary: string;
+  isolateVocals: boolean;
   videoFilter: VideoFilter;
   onZoomChange: (zoom: number) => void;
   onTrimChange: (start: number, end: number) => void;
@@ -54,6 +55,7 @@ export function TrimStep({
   zoom,
   whisperQuality,
   vocabulary,
+  isolateVocals,
   videoFilter,
   onZoomChange,
   onTrimChange,
@@ -84,6 +86,7 @@ export function TrimStep({
       const { job_id } = await postJson<{ job_id: string }>("/api/analyze", {
         file_id: fileId, count: 5, min_duration: range.min, max_duration: range.max,
         quality: whisperQuality, vocabulary: vocabulary || null,
+        isolate_vocals: isolateVocals,
       })
       stopPolling.current = pollJob<AnalyzeJob>(
         `/api/status/${job_id}`,

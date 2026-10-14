@@ -39,6 +39,8 @@ const PREVIEW_SIZES: Record<AspectRatio, { width: number; height: number }> = {
 
 export interface PreviewPlayerHandle {
   seek: (time: number) => void
+  /** Play [from, to] (absolute source seconds) then pause. */
+  playRange: (from: number, to: number) => void
   play: () => void
   pause: () => void
   getElement: () => HTMLVideoElement | null
@@ -146,13 +148,24 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
       setIsPlaying(false)
     }, [])
 
+    const stopAtRef = React.useRef<number | null>(null)
+    const playRange = React.useCallback((from: number, to: number) => {
+      const video = videoRef.current
+      if (!video) return
+      stopAtRef.current = to
+      video.currentTime = from
+      void video.play()
+      setIsPlaying(true)
+    }, [])
+
     React.useImperativeHandle(
       ref,
-      () => ({ seek, play, pause, getElement: () => videoRef.current }),
-      [seek, play, pause]
+      () => ({ seek, playRange, play, pause, getElement: () => videoRef.current }),
+      [seek, playRange, play, pause]
     )
 
     const togglePlay = () => {
+      stopAtRef.current = null
       if (isPlaying) pause()
       else play()
     }
@@ -163,6 +176,12 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
 
       const handleTimeUpdate = () => {
         onTimeUpdate?.(video.currentTime)
+        if (stopAtRef.current !== null && video.currentTime >= stopAtRef.current) {
+          stopAtRef.current = null
+          video.pause()
+          setIsPlaying(false)
+          return
+        }
         if (endTime !== undefined && video.currentTime >= endTime) {
           video.pause()
           video.currentTime = startTime

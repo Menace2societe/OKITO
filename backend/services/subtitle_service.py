@@ -82,6 +82,8 @@ PROMPT_ECHO_MARKER = "Transcription en français"
 
 # Max words shown per subtitle line — keep punchlines short for 9:16.
 MAX_WORDS_PER_LINE = 4
+# A silence longer than this (seconds) between two words starts a new line.
+LINE_BREAK_PAUSE = 0.6
 
 
 def _sanitize_words(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -117,7 +119,7 @@ def _sanitize_words(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         )
         cleaned = cleaned[matched:]
 
-    return cleaned
+    return merge_fragments(cleaned)
 
 
 def _ends_sentence(text: str) -> bool:
@@ -179,16 +181,51 @@ def _format_time(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{secs:05.2f}"
 
 
+def merge_fragments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Glue Whisper sub-word tokens back onto the previous word.
+
+    Whisper often emits "y" + "'en" or "noir" + "?" as separate words, which
+    renders as "y 'en" / "noir ?" and wastes a karaoke step on a symbol.
+    """
+    merged: List[Dict[str, Any]] = []
+    for word in words:
+        text = (word.get("text") or "").strip()
+        if not text:
+            continue
+        is_fragment = text[0] in "'’" or not any(c.isalnum() for c in text)
+        prev_open = bool(merged) and merged[-1]["text"].endswith(("'", "’"))
+        if merged and (is_fragment or prev_open):
+            merged[-1] = {
+                **merged[-1],
+                "text": merged[-1]["text"] + text,
+                "end": max(merged[-1]["end"], word.get("end", merged[-1]["end"])),
+            }
+        else:
+            merged.append({**word, "text": text})
+    return merged
+
+
 def _chunk_words(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Group words into subtitle lines of at most MAX_WORDS_PER_LINE."""
+    """Group words into subtitle lines of at most MAX_WORDS_PER_LINE.
+
+    A line also ends at a sentence end or at a pause in the voice, so a line
+    never straddles an instrumental gap.
+    """
     lines: List[Dict[str, Any]] = []
     current: List[Dict[str, Any]] = []
     for i, word in enumerate(words):
         current.append(word)
+        nxt = words[i + 1] if i + 1 < len(words) else None
+        pause = (
+            nxt is not None
+            and "start" in nxt and "end" in word
+            and nxt["start"] - word["end"] > LINE_BREAK_PAUSE
+        )
         if (
             len(current) >= MAX_WORDS_PER_LINE
             or _ends_sentence(word.get("text", ""))
-            or i == len(words) - 1
+            or pause
+            or nxt is None
         ):
             lines.append({"words": current})
             current = []
@@ -381,10 +418,10 @@ def align_text_to_words(
     perfectly in sync instead of falling back to an even distribution.
     """
     tokens = [t for t in text.split() if t]
-    refs = [
+    refs = merge_fragments([
         w for w in reference_words
         if w.get("start") is not None and w.get("end") is not None
-    ]
+    ])
     if not tokens or not refs:
         return []
 
@@ -429,6 +466,20 @@ def align_text_to_words(
     return [w for w in timed if w is not None]
 
 
+def _group_by_lines(
+    words: List[Dict[str, Any]], user_lines: List[List[str]]
+) -> List[Dict[str, Any]]:
+    """Split a flat, token-ordered word list along the user's own lines."""
+    lines: List[Dict[str, Any]] = []
+    cursor = 0
+    for tokens in user_lines:
+        chunk = words[cursor:cursor + len(tokens)]
+        cursor += len(tokens)
+        if chunk:
+            lines.append({"words": chunk})
+    return lines
+
+
 def _normalize_custom(
     custom_subtitles: CustomSubtitles,
     start_time: float,
@@ -439,11 +490,18 @@ def _normalize_custom(
     clip_duration = max(0.0, end_time - start_time)
 
     if isinstance(custom_subtitles, str):
+        # Line breaks typed in the editor are kept as the subtitle lines.
+        user_lines = [l.split() for l in custom_subtitles.splitlines() if l.strip()]
         if reference_words:
             aligned = align_text_to_words(custom_subtitles, reference_words)
             if aligned:
+                if len(user_lines) > 1:
+                    return _group_by_lines(aligned, user_lines)
                 return _chunk_words(aligned)
-        lines = _chunk_words([{"text": t} for t in custom_subtitles.split() if t])
+        words = [{"text": t} for t in custom_subtitles.split() if t]
+        lines = (
+            _group_by_lines(words, user_lines) if len(user_lines) > 1 else _chunk_words(words)
+        )
         _distribute_timing(lines, clip_duration)
         return lines
 

@@ -35,6 +35,8 @@ class ProcessRequest(BaseModel):
     # Whisper: "accurate" (medium) or "fast" (small), plus words to bias it.
     quality: str = "accurate"
     vocabulary: Optional[str] = None
+    # Strip the beat with Demucs before Whisper (much better on rap).
+    isolate_vocals: bool = True
 
 
 class TranscribeRequest(BaseModel):
@@ -44,6 +46,8 @@ class TranscribeRequest(BaseModel):
     end_time: Optional[float] = None
     quality: str = "accurate"
     vocabulary: Optional[str] = None
+    # Strip the beat with Demucs before Whisper (much better on rap).
+    isolate_vocals: bool = True
 
 
 def process_video_task(job_id: str, request: ProcessRequest) -> None:
@@ -89,48 +93,15 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
                     reference_words=request.reference_words,
                 )
             else:
-                # 2a. Audio extraction ---------------------------------
+                # 2a. Whisper — through the shared transcript cache, so a
+                # transcription already running from the Subtitles step is
+                # awaited and reused instead of being redone in parallel.
                 job_store.update(job_id, progress=10)
-                logger.info(
-                    "[process] 1/3 — Extraction de l'audio (%.2fs → %.2fs) depuis %s",
-                    request.start_time, request.end_time, input_path,
-                )
-                print(
-                    f"[process] 1/3 — Extraction de l'audio "
-                    f"({request.start_time:.2f}s → {request.end_time:.2f}s)"
-                )
-
-                audio_path = os.path.abspath(
-                    os.path.join(MEDIA_DIR, f"{job_id}_audio.wav")
-                )
-                ffmpeg_service.extract_audio(
-                    input_path, audio_path, request.start_time, request.end_time
-                )
-
-                # Sanity check: the extracted WAV must exist, be non-empty and
-                # report a positive duration, otherwise Whisper gets garbage.
-                audio_size = os.path.getsize(audio_path) if os.path.exists(audio_path) else 0
-                audio_duration = ffmpeg_service.get_duration(audio_path) if audio_size else 0.0
-                logger.info(
-                    "[process] Audio extrait : %s (%d octets, %.2fs)",
-                    audio_path, audio_size, audio_duration,
-                )
-                print(
-                    f"[process] Audio extrait : {audio_path} "
-                    f"({audio_size} octets, {audio_duration:.2f}s)"
-                )
-                if audio_size == 0 or audio_duration <= 0:
-                    logger.warning(
-                        "[process] Audio extrait vide ou illisible : %s", audio_path
-                    )
-                    print(f"[process] [WARN] Audio extrait vide ou illisible : {audio_path}")
-
-                # 2b. Whisper transcription ----------------------------
-                job_store.update(job_id, progress=30)
-                logger.info("[process] 2/3 — Transcription Whisper...")
-                print("[process] 2/3 — Transcription Whisper...")
-                words = whisper_service.transcribe(
-                    audio_path, request.quality, request.vocabulary
+                logger.info("[process] 1/3 — Transcription Whisper...")
+                print("[process] 1/3 — Transcription Whisper...")
+                words = _transcribe_range(
+                    input_path, request.start_time, request.end_time,
+                    request.quality, request.vocabulary, request.isolate_vocals,
                 )
                 logger.info("[process] Whisper a retourné %d mot(s).", len(words))
                 print(f"[process] Whisper a retourné {len(words)} mot(s).")
@@ -138,13 +109,9 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
                     logger.warning("[WARN] Aucun texte détecté par Whisper pour cette vidéo.")
                     print("[WARN] Aucun texte détecté par Whisper pour cette vidéo.")
 
-                # 2c. ASS generation -----------------------------------
+                # 2b. Subtitle lines -----------------------------------
                 job_store.update(job_id, progress=60)
                 lines = subtitle_service.words_to_lines(words)
-
-                # Clean up temp audio
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
 
             # Same lines for the burned-in ASS, the HTML5 VTT and the SRT export.
             line_count = subtitle_service.write_ass_lines(
@@ -266,25 +233,29 @@ def _resolve_input_path(
 FULL_TRANSCRIPT_MAX_DURATION = 600.0
 
 
-def _transcribe_segment(
+def _transcribe_range(
     input_path: str, start_t: float, end_t: float,
     quality: Optional[str], vocabulary: Optional[str],
+    isolate: bool = False,
+    duration: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
-    logger.info("[transcribe] Extraction audio %.2fs → %.2fs", start_t, end_t)
-    audio_path = os.path.abspath(
-        os.path.join(MEDIA_DIR, f"{uuid.uuid4()}_transcribe.wav")
+    """Clip-relative Whisper words for [start_t, end_t].
+
+    Short sources are transcribed whole once (cached per model + vocabulary)
+    and sliced, so changing the trim, picking a moment or rendering reuses
+    the same transcript; longer sources only transcribe the segment.
+    """
+    if duration is None:
+        duration = ffmpeg_service.get_duration(input_path)
+    if duration <= FULL_TRANSCRIPT_MAX_DURATION:
+        file_id = os.path.splitext(os.path.basename(input_path))[0]
+        transcript = moment_finder.get_transcript(
+            file_id, input_path, quality, vocabulary, isolate
+        )
+        return moment_finder.clip_words(transcript["words"], start_t, end_t)
+    return subtitle_service.merge_fragments(
+        moment_finder.transcribe_range(input_path, start_t, end_t, quality, vocabulary, isolate)
     )
-    try:
-        ffmpeg_service.extract_audio(input_path, audio_path, start_t, end_t)
-        if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="L'extraction audio a généré un fichier vide.",
-            )
-        return whisper_service.transcribe(audio_path, quality, vocabulary)
-    finally:
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
 
 
 def _transcribe_request(request: TranscribeRequest) -> Dict[str, Any]:
@@ -307,18 +278,10 @@ def _transcribe_request(request: TranscribeRequest) -> Dict[str, Any]:
             detail=f"Plage temporelle invalide : start_time={start_t}, end_time={end_t}.",
         )
 
-    if duration <= FULL_TRANSCRIPT_MAX_DURATION:
-        # Short source: transcribe it whole once (cached), then slice.
-        # Changing the trim or picking a moment is then instant.
-        file_id = os.path.splitext(os.path.basename(input_path))[0]
-        transcript = moment_finder.get_transcript(
-            file_id, input_path, request.quality, request.vocabulary
-        )
-        words = moment_finder.clip_words(transcript["words"], start_t, end_t)
-    else:
-        words = _transcribe_segment(
-            input_path, start_t, end_t, request.quality, request.vocabulary
-        )
+    words = _transcribe_range(
+        input_path, start_t, end_t, request.quality, request.vocabulary,
+        request.isolate_vocals, duration,
+    )
 
     logger.info("[transcribe] %d mot(s) transcrit(s).", len(words))
     print(f"[transcribe] {len(words)} mot(s) transcrit(s).")

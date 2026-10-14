@@ -22,6 +22,8 @@ interface ExportStepProps extends ProjectState {
   onProcess: () => void;
   onDownload: () => void;
   onNewClip: () => void;
+  /** Lyrics still being transcribed: the render waits for them. */
+  transcribing: boolean;
   onFormatChange: (format: "mp4" | "mp3" | "mkv") => void;
 }
 
@@ -41,6 +43,7 @@ export function ExportStep(props: ExportStepProps) {
     onDownload,
     onNewClip,
     onFormatChange,
+    transcribing,
   } = props
 
   const formatTime = (seconds: number) => {
@@ -104,14 +107,27 @@ export function ExportStep(props: ExportStepProps) {
       </Card>
 
       {jobStatus === "idle" && (
-        <Button
-          size="lg"
-          className="w-full text-lg h-14"
-          onClick={() => onProcess()}
-        >
-          <Wand2 className="mr-2 h-5 w-5" />
-          Traiter & Télécharger
-        </Button>
+        <div className="space-y-2">
+          <Button
+            size="lg"
+            className="w-full text-lg h-14"
+            onClick={() => onProcess()}
+            disabled={transcribing}
+          >
+            {transcribing ? (
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            ) : (
+              <Wand2 className="mr-2 h-5 w-5" />
+            )}
+            {transcribing ? "Transcription des paroles en cours…" : "Traiter & Télécharger"}
+          </Button>
+          {transcribing && (
+            <p className="text-center text-sm text-muted-foreground">
+              Le rendu attend la fin de la transcription pour utiliser vos paroles
+              (vous pourrez encore les corriger à l&apos;étape Subtitles).
+            </p>
+          )}
+        </div>
       )}
 
       {jobStatus === "processing" && (
@@ -191,6 +207,7 @@ export function ExportStep(props: ExportStepProps) {
           zoom={props.zoom}
           whisperQuality={props.whisperQuality}
           vocabulary={props.vocabulary}
+          isolateVocals={props.isolateVocals}
           subtitlesEnabled={subtitlesEnabled}
           subtitleStyle={subtitleStyle}
           videoFilter={videoFilter}

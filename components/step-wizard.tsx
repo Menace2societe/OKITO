@@ -12,6 +12,8 @@ import { SubtitleStep } from "@/components/steps/subtitle-step"
 import { ExportStep } from "@/components/steps/export-step"
 import type { AspectRatio } from "@/components/preview-player"
 import { pollJob } from "@/lib/jobs"
+import { useTranscription, type TranscriptionParams } from "@/components/use-transcription"
+import { linesFromWords } from "@/lib/subtitles"
 import {
   SUBTITLE_STYLES,
   VIDEO_FILTERS,
@@ -47,6 +49,7 @@ export interface ProjectState {
   zoom: number;
   whisperQuality: WhisperQuality;
   vocabulary: string;
+  isolateVocals: boolean;
   subtitlesEnabled: boolean;
   subtitleStyle: SubtitleStyle;
   customSubtitles: string;
@@ -96,6 +99,7 @@ const INITIAL_STATE: ProjectState = {
   zoom: 0,
   whisperQuality: "accurate",
   vocabulary: "",
+  isolateVocals: true,
   subtitlesEnabled: false,
   subtitleStyle: "bold_tiktok",
   customSubtitles: "",
@@ -114,6 +118,39 @@ export default function StepWizard() {
     setState((prev) => ({ ...prev, ...updates }))
   }
 
+  // Whisper job owned here so it survives step changes. A result is applied
+  // only if it still matches the current file and trim.
+  const transcription = useTranscription((result, params: TranscriptionParams) => {
+    setState((prev) => {
+      if (
+        params.fileId !== prev.fileId ||
+        params.startTime !== prev.startTime ||
+        params.endTime !== prev.endTime ||
+        prev.customSubtitles.trim()
+      ) {
+        return prev
+      }
+      return {
+        ...prev,
+        customSubtitles: Array.isArray(result.words) && result.words.length
+          ? linesFromWords(result.words)
+          : result.text || "",
+        transcriptWords: Array.isArray(result.words) ? result.words : null,
+      }
+    })
+  })
+
+  const startTranscription = () =>
+    transcription.start({
+      fileId: state.fileId,
+      videoPath: state.videoPath,
+      startTime: state.startTime,
+      endTime: state.endTime,
+      quality: state.whisperQuality,
+      vocabulary: state.vocabulary,
+      isolateVocals: state.isolateVocals,
+    })
+
   // Vocabulary and quality are the same from one video to the next.
   React.useEffect(() => {
     try {
@@ -121,6 +158,7 @@ export default function StepWizard() {
       updateState({
         vocabulary: typeof saved.vocabulary === "string" ? saved.vocabulary : "",
         whisperQuality: saved.whisperQuality === "fast" ? "fast" : "accurate",
+        isolateVocals: saved.isolateVocals !== false,
       })
     } catch {
       // Storage unavailable: keep defaults.
@@ -131,12 +169,16 @@ export default function StepWizard() {
     try {
       localStorage.setItem(
         PREFS_KEY,
-        JSON.stringify({ vocabulary: state.vocabulary, whisperQuality: state.whisperQuality })
+        JSON.stringify({
+          vocabulary: state.vocabulary,
+          whisperQuality: state.whisperQuality,
+          isolateVocals: state.isolateVocals,
+        })
       )
     } catch {
       // Storage unavailable: preferences just won't persist.
     }
-  }, [state.vocabulary, state.whisperQuality])
+  }, [state.vocabulary, state.whisperQuality, state.isolateVocals])
 
   const handleNext = () => setCurrentStep((p) => Math.min(STEPS.length - 1, p + 1))
   const handleBack = () => setCurrentStep((p) => Math.max(0, p - 1))
@@ -148,6 +190,7 @@ export default function StepWizard() {
       ...INITIAL_STATE,
       vocabulary: prev.vocabulary,
       whisperQuality: prev.whisperQuality,
+      isolateVocals: prev.isolateVocals,
     }))
   }
 
@@ -179,7 +222,7 @@ export default function StepWizard() {
     updateState({
       startTime: moment.start_time,
       endTime: moment.end_time,
-      customSubtitles: moment.text,
+      customSubtitles: moment.words.length ? linesFromWords(moment.words) : moment.text,
       transcriptWords: moment.words.length ? moment.words : null,
     })
   }
@@ -234,6 +277,7 @@ export default function StepWizard() {
           zoom: state.aspectRatio.startsWith("9:16") ? state.zoom : null,
           quality: state.whisperQuality,
           vocabulary: state.vocabulary || null,
+          isolate_vocals: state.isolateVocals,
           output_format: state.outputFormat,
         }),
       })
@@ -380,6 +424,7 @@ export default function StepWizard() {
             zoom={state.zoom}
             whisperQuality={state.whisperQuality}
             vocabulary={state.vocabulary}
+            isolateVocals={state.isolateVocals}
             videoFilter={state.videoFilter}
             onZoomChange={(zoom) => updateState({ zoom })}
             onTrimChange={handleTrimChange}
@@ -406,11 +451,19 @@ export default function StepWizard() {
             vocabulary={state.vocabulary}
             onWhisperQualityChange={(whisperQuality) => updateState({ whisperQuality })}
             onVocabularyChange={(vocabulary) => updateState({ vocabulary })}
+            isolateVocals={state.isolateVocals}
+            onIsolateVocalsChange={(isolateVocals) => updateState({ isolateVocals })}
+            transcriptWords={state.transcriptWords}
             customSubtitles={state.customSubtitles}
             onToggle={(enabled) => updateState({ subtitlesEnabled: enabled })}
             onStyleChange={(style) => updateState({ subtitleStyle: style })}
             onCustomSubtitlesChange={(text) => updateState({ customSubtitles: text })}
-            onTranscriptChange={(words) => updateState({ transcriptWords: words })}
+            transcription={transcription}
+            onTranscribe={() => {
+              // A fresh transcription replaces the current text.
+              updateState({ customSubtitles: "", transcriptWords: null })
+              void startTranscription()
+            }}
           />
         )}
 
@@ -420,6 +473,7 @@ export default function StepWizard() {
             onProcess={handleProcess}
             onDownload={handleDownload}
             onNewClip={handleNewClip}
+            transcribing={state.subtitlesEnabled && transcription.status === "running"}
             onFormatChange={(format) => updateState({ outputFormat: format })}
           />
         )}

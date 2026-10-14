@@ -6,6 +6,7 @@ the editor out from under it.
 """
 import logging
 import os
+import shutil
 import threading
 import time
 from typing import Any, Dict, List, Set
@@ -45,6 +46,10 @@ def cleanup(retention_days: float = MEDIA_RETENTION_DAYS, dry_run: bool = False)
     protected = set(job_store.active_request_files())
     doomed: Dict[str, str] = {}  # path -> reason
     for entry in os.scandir(MEDIA_DIR):
+        if entry.is_dir() and entry.name.endswith("_demucs"):
+            if now - entry.stat().st_mtime > TEMP_MAX_AGE and not dry_run:
+                shutil.rmtree(entry.path, ignore_errors=True)
+            continue
         if not entry.is_file():
             continue
         name, mtime = entry.name, entry.stat().st_mtime
