@@ -1,21 +1,17 @@
 import os
 import re
 import uuid
-import glob
 import logging
 import traceback
 from typing import Dict, Any, Optional, List, Union
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
-from backend.config import MEDIA_DIR
-from backend.services import ffmpeg_service, whisper_service, subtitle_service
+from backend.config import MEDIA_DIR, find_source
+from backend.services import ffmpeg_service, whisper_service, subtitle_service, job_store
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-jobs: Dict[str, Dict[str, Any]] = {}
-
 
 class ProcessRequest(BaseModel):
     file_id: str
@@ -44,20 +40,19 @@ class TranscribeRequest(BaseModel):
 
 def process_video_task(job_id: str, request: ProcessRequest) -> None:
     """Background task — runs FFmpeg pipeline and updates job status."""
-    jobs[job_id]["status"] = "processing"
+    job_store.update(job_id, status="processing")
 
     try:
         # ── 1. Find input file ──────────────────────────────────────────
-        possible_files = glob.glob(os.path.join(MEDIA_DIR, f"{request.file_id}.*"))
-        if not possible_files:
+        source = find_source(request.file_id)
+        if not source:
             msg = f"Fichier source introuvable pour file_id={request.file_id}"
             logger.error(msg)
             print(f"[process] ERREUR : {msg}")
-            jobs[job_id]["status"] = "failed"
-            jobs[job_id]["error"] = msg
+            job_store.update(job_id, status="failed", error=msg)
             return
 
-        input_path = os.path.abspath(possible_files[0])
+        input_path = source
         logger.info("[process] Fichier source : %s", input_path)
         print(f"[process] Fichier source : {input_path}")
 
@@ -70,7 +65,7 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
 
             if request.custom_subtitles:
                 # 2b. Custom text — bypass Whisper entirely ---------------
-                jobs[job_id]["progress"] = 40
+                job_store.update(job_id, progress=40)
                 logger.info(
                     "[process] 2/3 — Sous-titres personnalisés fournis : "
                     "transcription Whisper ignorée."
@@ -87,7 +82,7 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
                 )
             else:
                 # 2a. Audio extraction ---------------------------------
-                jobs[job_id]["progress"] = 10
+                job_store.update(job_id, progress=10)
                 logger.info(
                     "[process] 1/3 — Extraction de l'audio (%.2fs → %.2fs) depuis %s",
                     request.start_time, request.end_time, input_path,
@@ -123,7 +118,7 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
                     print(f"[process] [WARN] Audio extrait vide ou illisible : {audio_path}")
 
                 # 2b. Whisper transcription ----------------------------
-                jobs[job_id]["progress"] = 30
+                job_store.update(job_id, progress=30)
                 logger.info("[process] 2/3 — Transcription Whisper...")
                 print("[process] 2/3 — Transcription Whisper...")
                 words = whisper_service.transcribe(audio_path)
@@ -134,7 +129,7 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
                     print("[WARN] Aucun texte détecté par Whisper pour cette vidéo.")
 
                 # 2c. ASS generation -----------------------------------
-                jobs[job_id]["progress"] = 60
+                job_store.update(job_id, progress=60)
                 lines = subtitle_service.words_to_lines(words)
 
                 # Clean up temp audio
@@ -158,7 +153,7 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
             )
 
         # ── 3. FFmpeg encode ────────────────────────────────────────────
-        jobs[job_id]["progress"] = 70
+        job_store.update(job_id, progress=70)
         output_filename = f"{job_id}_out.{request.output_format}"
         output_path = os.path.abspath(
             os.path.join(MEDIA_DIR, output_filename)
@@ -178,12 +173,14 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
         )
 
         # ── 4. Success ──────────────────────────────────────────────────
-        jobs[job_id]["progress"] = 100
-        jobs[job_id]["status"] = "completed"
-        jobs[job_id]["output_url"] = f"/api/files/{output_filename}"
-        if request.subtitles_enabled:
-            jobs[job_id]["vtt_url"] = f"/api/files/{job_id}.vtt"
-            jobs[job_id]["srt_url"] = f"/api/files/{job_id}.srt"
+        job_store.update(
+            job_id,
+            progress=100,
+            status="completed",
+            output_url=f"/api/files/{output_filename}",
+            vtt_url=f"/api/files/{job_id}.vtt" if request.subtitles_enabled else None,
+            srt_url=f"/api/files/{job_id}.srt" if request.subtitles_enabled else None,
+        )
         logger.info("[process] ✅ Traitement terminé : %s", output_filename)
         print(f"[process] ✅ Traitement terminé : {output_filename}")
 
@@ -192,8 +189,7 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
         error_msg = str(e)
         logger.error("[process] ❌ ÉCHEC du traitement :\n%s", traceback.format_exc())
         print(f"[process] ❌ ÉCHEC du traitement :\n{traceback.format_exc()}")
-        jobs[job_id]["status"] = "failed"
-        jobs[job_id]["error"] = error_msg
+        job_store.update(job_id, status="failed", error=error_msg)
 
 
 @router.post("/process")
@@ -202,12 +198,7 @@ async def process(
 ) -> Dict[str, str]:
     """Launch video processing in the background and return a job ID."""
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {
-        "status": "queued",
-        "progress": 0,
-        "output_url": None,
-        "error": None,
-    }
+    job_store.create(job_id, "render", request.model_dump())
     logger.info(
         "[process] Job %s créé — file_id=%s, %ss→%ss, ratio=%s, subs=%s, fmt=%s",
         job_id, request.file_id, request.start_time, request.end_time,
@@ -249,9 +240,9 @@ def _resolve_input_path(
         logger.warning("[transcribe] video_path invalide ou hors media : %s", candidate)
 
     if file_id:
-        matches = glob.glob(os.path.join(MEDIA_DIR, f"{file_id}.*"))
-        if matches:
-            return os.path.abspath(matches[0])
+        source = find_source(file_id)
+        if source:
+            return source
 
     raise HTTPException(
         status_code=400,

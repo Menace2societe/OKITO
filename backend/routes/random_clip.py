@@ -1,10 +1,8 @@
-import os
-import glob
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from backend.config import MEDIA_DIR
+from backend.config import find_source
 from backend.services import clip_finder
 
 router = APIRouter()
@@ -20,8 +18,8 @@ class RandomClipRequest(BaseModel):
 @router.post("/random-clip")
 async def random_clip(request: RandomClipRequest) -> Dict[str, Any]:
     """Return a random start/end window snapped to speech pauses."""
-    matches = glob.glob(os.path.join(MEDIA_DIR, f"{glob.escape(request.file_id)}.*"))
-    if not matches:
+    source = find_source(request.file_id)
+    if not source:
         raise HTTPException(status_code=404, detail="Fichier source introuvable.")
     if request.max_duration < request.min_duration:
         raise HTTPException(status_code=400, detail="max_duration < min_duration.")
@@ -29,7 +27,7 @@ async def random_clip(request: RandomClipRequest) -> Dict[str, Any]:
     try:
         return await run_in_threadpool(
             clip_finder.pick_random_clip,
-            matches[0],
+            source,
             request.min_duration,
             request.max_duration,
             request.seed,

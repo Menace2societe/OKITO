@@ -70,3 +70,21 @@ export const pickRandom = <T,>(items: readonly T[], exclude?: T): T => {
   const pool = items.length > 1 ? items.filter((i) => i !== exclude) : items
   return pool[Math.floor(Math.random() * pool.length)]
 }
+
+// Durations offered for random / best-moment clips (seconds) — Shorts cap at 60 s.
+export const CLIP_DURATIONS = [
+  { label: "15–30 s", min: 15, max: 30 },
+  { label: "30–60 s", min: 30, max: 60 },
+  { label: "60–90 s", min: 60, max: 90 },
+]
+
+export interface Moment {
+  start_time: number
+  end_time: number
+  title: string
+  reason: string
+  score: number
+  text: string
+  words: TranscriptWord[]
+  source: "claude" | "heuristic"
+}

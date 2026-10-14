@@ -1,14 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { Smartphone, Square, Monitor, Dices, Loader2, Palette } from "lucide-react"
+import { Smartphone, Square, Monitor, Dices, Loader2, Palette, Sparkles, ScanFace } from "lucide-react"
 import { DualRangeSlider } from "@/components/ui/dual-range-slider"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PreviewPlayer, type AspectRatio, type PreviewPlayerHandle, type VideoFilter } from "@/components/preview-player"
 import { cn } from "@/lib/utils"
-import { VIDEO_FILTERS } from "@/lib/presets"
+import { CLIP_DURATIONS, VIDEO_FILTERS, type Moment } from "@/lib/presets"
+import { pollJob, postJson } from "@/lib/jobs"
 
 interface TrimStepProps {
   fileId: string | null;
@@ -22,14 +23,16 @@ interface TrimStepProps {
   onAspectRatioChange: (ratio: AspectRatio) => void;
   onVideoFilterChange: (filter: VideoFilter) => void;
   onRandomLook: () => void;
+  /** Apply a best moment: trim + its already-timed transcript. */
+  onSelectMoment: (moment: Moment) => void;
 }
 
-// Durations offered for random clips (seconds) — Shorts cap at 60 s.
-const RANDOM_DURATIONS = [
-  { label: "15–30 s", min: 15, max: 30 },
-  { label: "30–60 s", min: 30, max: 60 },
-  { label: "60–90 s", min: 60, max: 90 },
-]
+interface AnalyzeJob {
+  status: "queued" | "processing" | "completed" | "failed"
+  progress: number
+  error: string | null
+  result: { source: "claude" | "heuristic"; moments: Moment[] } | null
+}
 
 export function TrimStep({
   fileId,
@@ -43,18 +46,51 @@ export function TrimStep({
   onAspectRatioChange,
   onVideoFilterChange,
   onRandomLook,
+  onSelectMoment,
 }: TrimStepProps) {
   const playerRef = React.useRef<PreviewPlayerHandle>(null)
   const [currentTime, setCurrentTime] = React.useState(startTime)
   const [randomRange, setRandomRange] = React.useState(0)
   const [randomLoading, setRandomLoading] = React.useState(false)
   const [randomInfo, setRandomInfo] = React.useState<string | null>(null)
+  const [analysis, setAnalysis] = React.useState<AnalyzeJob | null>(null)
+  const stopPolling = React.useRef<(() => void) | null>(null)
+
+  React.useEffect(() => () => stopPolling.current?.(), [])
+
+  // Whisper transcribes the whole video once (cached), then Claude — or a
+  // local scoring when no API key is set — ranks the strongest passages.
+  const handleBestMoments = async () => {
+    if (!fileId) return
+    const range = CLIP_DURATIONS[randomRange]
+    stopPolling.current?.()
+    setAnalysis({ status: "queued", progress: 0, error: null, result: null })
+    try {
+      const { job_id } = await postJson<{ job_id: string }>("/api/analyze", {
+        file_id: fileId, count: 5, min_duration: range.min, max_duration: range.max,
+      })
+      stopPolling.current = pollJob<AnalyzeJob>(
+        `/api/status/${job_id}`,
+        setAnalysis,
+        (job) => job.status === "completed" || job.status === "failed",
+        (error) => setAnalysis({ status: "failed", progress: 0, error, result: null })
+      )
+    } catch (e) {
+      setAnalysis({ status: "failed", progress: 0, error: e instanceof Error ? e.message : "Erreur inconnue", result: null })
+    }
+  }
+
+  const selectMoment = (moment: Moment) => {
+    onSelectMoment(moment)
+    playerRef.current?.seek(moment.start_time)
+    setCurrentTime(moment.start_time)
+  }
 
   // Ask the backend for a random window snapped to speech pauses, so the
   // clip doesn't start or end mid-sentence.
   const handleRandomClip = async () => {
     if (!fileId) return
-    const range = RANDOM_DURATIONS[randomRange]
+    const range = CLIP_DURATIONS[randomRange]
     setRandomLoading(true)
     setRandomInfo(null)
     try {
@@ -141,7 +177,19 @@ export function TrimStep({
             )}
             Clip aléatoire
           </Button>
-          {RANDOM_DURATIONS.map((range, idx) => (
+          <Button
+            variant="secondary"
+            onClick={handleBestMoments}
+            disabled={!fileId || analysis?.status === "queued" || analysis?.status === "processing"}
+          >
+            {analysis?.status === "queued" || analysis?.status === "processing" ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-4 w-4" />
+            )}
+            Meilleurs moments
+          </Button>
+          {CLIP_DURATIONS.map((range, idx) => (
             <Button
               key={range.label}
               size="sm"
@@ -158,8 +206,52 @@ export function TrimStep({
         </div>
         <p className="text-xs text-muted-foreground">
           {randomInfo ??
-            "Choisit un extrait au hasard, calé sur les pauses de la voix. « Look aléatoire » tire un filtre et un style de sous-titres."}
+            "« Clip aléatoire » tire un extrait calé sur les pauses de la voix. « Meilleurs moments » analyse toute la vidéo pour trouver les passages les plus forts. « Look aléatoire » tire un filtre et un style de sous-titres."}
         </p>
+
+        {(analysis?.status === "queued" || analysis?.status === "processing") && (
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Analyse de la vidéo complète ({analysis.progress}%) — la première fois, Whisper
+            transcrit toute la vidéo, ce qui peut prendre quelques minutes.
+          </p>
+        )}
+        {analysis?.status === "failed" && (
+          <p className="text-xs text-destructive">{analysis.error}</p>
+        )}
+        {analysis?.status === "completed" && analysis.result && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              {analysis.result.source === "claude"
+                ? "Moments choisis par Claude :"
+                : "Moments classés localement (définissez ANTHROPIC_API_KEY pour un choix par Claude) :"}
+            </p>
+            {analysis.result.moments.length === 0 && (
+              <p className="text-xs text-muted-foreground">Aucun passage trouvé pour cette durée.</p>
+            )}
+            {analysis.result.moments.map((moment) => {
+              const active = moment.start_time === startTime && moment.end_time === endTime
+              return (
+                <button
+                  key={`${moment.start_time}-${moment.end_time}`}
+                  onClick={() => selectMoment(moment)}
+                  className={cn(
+                    "w-full rounded-md border p-3 text-left text-sm transition-colors hover:bg-accent",
+                    active && "border-primary bg-primary/5"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">{moment.title}</span>
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                      {formatTime(moment.start_time)}–{formatTime(moment.end_time)} · {moment.score}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{moment.reason}</p>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </Card>
 
       <div className="space-y-4">
@@ -179,6 +271,19 @@ export function TrimStep({
               <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                 Recommandé
               </span>
+            </div>
+          </Card>
+          <Card
+            className={cn(
+              "cursor-pointer p-4 transition-colors hover:bg-accent",
+              aspectRatio === "9:16_face" && "border-primary bg-primary/5"
+            )}
+            onClick={() => onAspectRatioChange("9:16_face")}
+          >
+            <div className="flex flex-col items-center space-y-2 text-center">
+              <ScanFace className="h-8 w-8" />
+              <div className="text-sm font-medium">Reels / TikTok</div>
+              <div className="text-xs text-muted-foreground">9:16 — Suit le visage</div>
             </div>
           </Card>
           <Card

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import type { ProjectState } from "@/components/step-wizard"
+import { BatchPanel } from "@/components/batch-panel"
 import { SUBTITLE_STYLES, VIDEO_FILTERS } from "@/lib/presets"
 
 const SUBTITLE_STYLE_LABELS = Object.fromEntries(
@@ -181,6 +182,17 @@ export function ExportStep(props: ExportStepProps) {
             Réessayer
           </Button>
         </div>
+      )}
+
+      {outputFormat !== "mp3" && (
+        <BatchPanel
+          fileId={props.fileId}
+          aspectRatio={aspectRatio}
+          subtitlesEnabled={subtitlesEnabled}
+          subtitleStyle={subtitleStyle}
+          videoFilter={videoFilter}
+          outputFormat={outputFormat}
+        />
       )}
     </div>
   )

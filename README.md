@@ -8,11 +8,16 @@ réseaux sociaux — le tout sans service cloud.
 
 - **Import** : fichier local (`.mp4`, `.mkv`, `.mov`, `.mp3`) ou lien (YouTube, etc.).
 - **Trim / Édition** : sélection de la séquence, cadrage 9:16 (vidéo entière
-  sur fond flou ou crop) / 1:1 / 16:9 et 7 filtres vidéo (Cinéma Intense,
+  sur fond flou, crop centré ou **suivi du visage** via OpenCV) / 1:1 / 16:9 et 7 filtres vidéo (Cinéma Intense,
   Vibrant Social, Warm Vlog, Cold Teal, Vintage Film, Noir & Blanc Profond, Aucun).
 - **Clip aléatoire** : extrait de 15–30 s, 30–60 s ou 60–90 s tiré au hasard et
   calé sur les pauses de la voix (`silencedetect`) ; « Look aléatoire » tire un
   filtre et un style de sous-titres.
+- **Meilleurs moments** : Whisper transcrit la vidéo entière (mis en cache),
+  puis Claude choisit les passages les plus forts. Sans clé API, un score local
+  (débit de parole, intensité sonore, mots d'accroche) prend le relais.
+- **Plusieurs clips en un lancement** : 3, 5 ou 10 clips (aléatoires ou
+  meilleurs moments), avec un look différent par clip si souhaité.
 - **Sous-titres** : transcription locale via Whisper, mot prononcé surligné
   (effet TikTok) et 4 presets ASS (Bold TikTok, Neon Yellow, Impact Pop,
   Minimal Clean). Le texte corrigé garde le timing exact de la voix.
@@ -21,10 +26,27 @@ réseaux sociaux — le tout sans service cloud.
   valider le cadrage avant le rendu.
 - **Export** : rendu FFmpeg en MP4, MKV ou MP3.
 
+- **Jobs persistants** : la file de rendus est stockée en SQLite
+  (`backend/data/jobs.db`) et survit à un redémarrage.
+- **Ménage automatique** : `backend/media` est nettoyé au démarrage puis toutes
+  les 6 h (fichiers de plus de `MEDIA_RETENTION_DAYS` jours, 7 par défaut,
+  fichiers temporaires et imports en double). Un même fichier importé deux fois
+  n'est stocké qu'une fois.
+
+## Configuration
+
+| Variable | Défaut | Rôle |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | — | Active le choix des meilleurs moments par Claude |
+| `CLIPFLOW_LLM` | `on` | `off` pour forcer le score local |
+| `CLIPFLOW_LLM_MODEL` | `claude-opus-5-5` | Modèle utilisé pour les meilleurs moments |
+| `MEDIA_RETENTION_DAYS` | `7` | Durée de conservation des fichiers média |
+
 ## Pile technique
 
 - **Frontend** : Next.js 14 (App Router), React, Tailwind CSS, Radix UI.
-- **Backend** : FastAPI, FFmpeg / FFprobe, faster-whisper.
+- **Backend** : FastAPI, FFmpeg / FFprobe, faster-whisper, OpenCV, SQLite,
+  SDK Anthropic (optionnel).
 
 ## Prérequis
 
@@ -56,9 +78,12 @@ app/                  Pages Next.js (layout, page)
 components/           Interface (step-wizard, steps, ui)
 backend/
   main.py             Application FastAPI
-  routes/             Endpoints (upload, download-url, process, status, files)
-  services/           FFmpeg, Whisper, génération ASS (sous-titres)
-  media/              Fichiers importés et rendus
+  routes/             Endpoints (upload, download-url, process, status, files,
+                      random-clip, analyze, batch, media)
+  services/           FFmpeg, Whisper, ASS, suivi de visage, meilleurs moments,
+                      jobs SQLite, nettoyage
+  media/              Fichiers importés et rendus (nettoyé automatiquement)
+  data/               Base SQLite des jobs
 ```
 
 ## Filtres et presets

@@ -12,6 +12,9 @@ ASPECT_RATIOS = {
     # blurred copy of the video. The actual filter_complex is built in
     # process_video() because it requires stream splitting.
     "9:16_fit": None,
+    # 9:16_face follows the speaker's face; the crop x is driven over time by
+    # a sendcmd script built in process_video() (see face_tracker).
+    "9:16_face": None,
     "1:1": r"crop=min(iw\,ih):min(iw\,ih),scale=1080:1080",
     "16:9": "scale=1920:-2,crop=1920:1080"
 }
@@ -137,6 +140,21 @@ def get_duration(file_path: str) -> float:
         return 0.0
 
 
+def get_video_size(file_path: str) -> tuple[int, int]:
+    """Return (width, height) of the first video stream."""
+    cmd = [
+        _find_ffprobe(),
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0:s=x",
+        os.path.abspath(file_path),
+    ]
+    result = _run_cmd(cmd, label="ffprobe:size")
+    width, height = result.stdout.strip().split("x")[:2]
+    return int(width), int(height)
+
+
 def extract_audio(
     input_path: str,
     output_path: str,
@@ -160,7 +178,7 @@ def extract_audio(
 
 
 def _ass_path_for_ffmpeg(ass_path: str) -> str:
-    """Convert an ASS file path to a relative path with forward slashes.
+    """Convert a filter file path (ass, sendcmd) to relative forward slashes.
 
     Using a relative path avoids the Windows drive letter colon (C:)
     which FFmpeg's filter parser misinterprets as an option separator.
@@ -219,6 +237,25 @@ def process_video(
     abs_output = os.path.abspath(output_path)
 
     use_filter_complex = (aspect_ratio == "9:16_fit")
+    face_cmd_path: Optional[str] = None
+    framing = ASPECT_RATIOS.get(aspect_ratio) or ASPECT_RATIOS["16:9"]
+
+    if aspect_ratio == "9:16_face":
+        # Imported lazily: OpenCV is only needed for this framing mode.
+        from backend.services import face_tracker
+
+        width, height = get_video_size(abs_input)
+        scaled_width = int(round(width * 1920 / height / 2) * 2)
+        if scaled_width <= 1080:
+            # Source is already portrait: nothing to follow, keep it whole.
+            use_filter_complex = True
+        else:
+            face_cmd_path = os.path.splitext(abs_output)[0] + "_face.cmd"
+            x0 = face_tracker.write_crop_commands(
+                abs_input, start_time, end_time, scaled_width, 1080, face_cmd_path
+            )
+            rel_cmd = _ass_path_for_ffmpeg(face_cmd_path)
+            framing = f"sendcmd=f={rel_cmd},scale=-2:1920,crop@face=1080:1920:{x0}:0"
 
     color_filter = VIDEO_FILTERS.get(video_filter, VIDEO_FILTERS[DEFAULT_VIDEO_FILTER])
 
@@ -264,7 +301,7 @@ def process_video(
             cmd += ["-filter_complex", fc, "-map", "[out]", "-map", "0:a?"]
         else:
             # Standard simple -vf pipeline (crop / scale)
-            vf_parts = [ASPECT_RATIOS.get(aspect_ratio, ASPECT_RATIOS["16:9"])]
+            vf_parts = [framing]
             if color_filter:
                 vf_parts.append(color_filter)
             if ass_path:
@@ -274,7 +311,11 @@ def process_video(
 
     cmd += ["-af", AUDIO_LOUDNORM, *output_options, abs_output]
 
-    _run_cmd(cmd, label="ffmpeg:process_video")
+    try:
+        _run_cmd(cmd, label="ffmpeg:process_video")
+    finally:
+        if face_cmd_path and os.path.exists(face_cmd_path):
+            os.remove(face_cmd_path)
     return abs_output
 
 

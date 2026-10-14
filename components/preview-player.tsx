@@ -5,7 +5,7 @@ import { Play, Pause } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-export type AspectRatio = "9:16" | "9:16_fit" | "1:1" | "16:9"
+export type AspectRatio = "9:16" | "9:16_fit" | "9:16_face" | "1:1" | "16:9"
 export type { VideoFilter } from "@/lib/presets"
 
 // CSS approximations of the FFmpeg filter chains, applied instantly (0 ms)
@@ -31,6 +31,8 @@ export const FILTER_STYLES: Record<string, React.CSSProperties> = {
 const PREVIEW_SIZES: Record<AspectRatio, { width: number; height: number }> = {
   "9:16": { width: 236, height: 420 },
   "9:16_fit": { width: 236, height: 420 },
+  // Preview stays centre-cropped; the face tracking happens at render time.
+  "9:16_face": { width: 236, height: 420 },
   "1:1": { width: 380, height: 380 },
   "16:9": { width: 640, height: 360 },
 }

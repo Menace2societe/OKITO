@@ -10,10 +10,12 @@ import { ImportStep } from "@/components/steps/import-step"
 import { TrimStep } from "@/components/steps/trim-step"
 import { SubtitleStep } from "@/components/steps/subtitle-step"
 import { ExportStep } from "@/components/steps/export-step"
+import type { AspectRatio } from "@/components/preview-player"
 import {
   SUBTITLE_STYLES,
   VIDEO_FILTERS,
   pickRandom,
+  type Moment,
   type SubtitleStyle,
   type TranscriptWord,
   type VideoFilter,
@@ -27,7 +29,7 @@ export interface ProjectState {
   duration: number;
   startTime: number;
   endTime: number;
-  aspectRatio: "9:16" | "9:16_fit" | "1:1" | "16:9";
+  aspectRatio: AspectRatio;
   subtitlesEnabled: boolean;
   subtitleStyle: SubtitleStyle;
   customSubtitles: string;
@@ -120,6 +122,17 @@ export default function StepWizard() {
         endTime: end,
         ...(staleTranscript ? { customSubtitles: "", transcriptWords: null } : {}),
       }
+    })
+  }
+
+  // A best moment already has its Whisper words: reuse them as subtitles
+  // instead of transcribing the segment again.
+  const handleSelectMoment = (moment: Moment) => {
+    updateState({
+      startTime: moment.start_time,
+      endTime: moment.end_time,
+      customSubtitles: moment.text,
+      transcriptWords: moment.words.length ? moment.words : null,
     })
   }
 
@@ -325,6 +338,7 @@ export default function StepWizard() {
             onAspectRatioChange={(ratio) => updateState({ aspectRatio: ratio })}
             onVideoFilterChange={(filter) => updateState({ videoFilter: filter })}
             onRandomLook={handleRandomLook}
+            onSelectMoment={handleSelectMoment}
           />
         )}
         

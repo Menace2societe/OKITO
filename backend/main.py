@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import MEDIA_DIR
-from backend.routes import upload, download_url, process, status, files, random_clip
+from backend.routes import upload, download_url, process, status, files, random_clip, batch, media
+from backend.services import job_store, media_cleanup
 
 app = FastAPI(title="ClipFlow API", version="1.0.0")
 
@@ -47,6 +48,14 @@ app.include_router(process.router, prefix="/api")
 app.include_router(status.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
 app.include_router(random_clip.router, prefix="/api")
+app.include_router(batch.router, prefix="/api")
+app.include_router(media.router, prefix="/api")
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    job_store.init()
+    media_cleanup.start_background_cleanup()
 
 # ---------------------------------------------------------------------------
 # Static file mount — serves video files directly for <video> preview.

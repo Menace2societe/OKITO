@@ -4,3 +4,8 @@ python-multipart==0.0.20
 aiofiles==24.1.0
 faster-whisper==1.1.0
 yt-dlp>=2026.08.19
+# Face-following 9:16 crop (4.x still bundles the Haar face cascades)
+opencv-python-headless>=4.10,<5
+numpy>=2.0
+# Optional: best-moment selection by Claude (falls back to local scoring without credentials)
+anthropic>=1.13
