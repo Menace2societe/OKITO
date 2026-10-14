@@ -258,7 +258,7 @@ def download_video(url: str, output_dir: str) -> Dict[str, Any]:
         "title": title,
         "duration": duration,
         "url": f"/api/files/{filename}",
-        "preview_url": f"http://localhost:8000/media/{filename}",
+        "preview_url": f"/api/files/{filename}",
         "video_path": video_path,
         "download_strategy": strategy_name,
     }

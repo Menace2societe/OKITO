@@ -49,3 +49,6 @@ backend/cookies.txt
 # IDE
 .vscode/
 .idea/
+
+# Runtime logs (start-clipflow.ps1)
+logs/

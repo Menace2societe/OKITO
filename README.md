@@ -71,6 +71,23 @@ uvicorn backend.main:app --reload --port 8000
 Le frontend est disponible sur `http://localhost:3000` et l'API sur
 `http://localhost:8000`.
 
+## Utilisation au quotidien (mode production)
+
+```powershell
+.\start-clipflow.ps1          # lance le backend, le frontend et tailscale serve
+.\start-clipflow.ps1 -Build   # à faire après une modification du code
+.\start-clipflow.ps1 -Stop    # arrête tout
+```
+
+Les deux serveurs n'écoutent que sur `127.0.0.1` : l'application est
+accessible sur ce PC (`http://localhost:3000`) et, via `tailscale serve`, depuis
+tes appareils Tailscale (`https://<nom-du-pc>.<tailnet>.ts.net`) — jamais depuis
+l'internet public. Les journaux sont dans `logs/`.
+
+Démarrage automatique : un raccourci `ClipFlow.lnk` dans le dossier Démarrage
+de Windows (`shell:startup`) lance le script, masqué, à chaque ouverture de
+session. Supprimer ce raccourci pour désactiver le démarrage automatique.
+
 ## Structure
 
 ```
