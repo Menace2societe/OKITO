@@ -10,8 +10,16 @@ import { ImportStep } from "@/components/steps/import-step"
 import { TrimStep } from "@/components/steps/trim-step"
 import { SubtitleStep } from "@/components/steps/subtitle-step"
 import { ExportStep } from "@/components/steps/export-step"
+import {
+  SUBTITLE_STYLES,
+  VIDEO_FILTERS,
+  pickRandom,
+  type SubtitleStyle,
+  type TranscriptWord,
+  type VideoFilter,
+} from "@/lib/presets"
 
-interface ProjectState {
+export interface ProjectState {
   fileId: string | null;
   fileName: string | null;
   fileUrl: string | null;
@@ -19,16 +27,19 @@ interface ProjectState {
   duration: number;
   startTime: number;
   endTime: number;
-  aspectRatio: "9:16" | "1:1" | "16:9";
+  aspectRatio: "9:16" | "9:16_fit" | "1:1" | "16:9";
   subtitlesEnabled: boolean;
-  subtitleStyle: "bold_tiktok" | "neon_yellow" | "minimal_clean";
+  subtitleStyle: SubtitleStyle;
   customSubtitles: string;
-  videoFilter: "cinema_intense" | "vibrant_social" | "bw_deep" | "none";
+  transcriptWords: TranscriptWord[] | null;
+  videoFilter: VideoFilter;
   outputFormat: "mp4" | "mp3" | "mkv";
   jobId: string | null;
   jobStatus: "idle" | "processing" | "completed" | "error";
   jobProgress: number;
   outputUrl: string | null;
+  vttUrl: string | null;
+  srtUrl: string | null;
   errorMessage: string | null;
 }
 
@@ -41,29 +52,41 @@ const STEPS = [
 
 const PROCESS_TIMEOUT_MS = 5 * 60 * 1000
 
+const JOB_RESET: Pick<
+  ProjectState,
+  "jobId" | "jobStatus" | "jobProgress" | "outputUrl" | "vttUrl" | "srtUrl" | "errorMessage"
+> = {
+  jobId: null,
+  jobStatus: "idle",
+  jobProgress: 0,
+  outputUrl: null,
+  vttUrl: null,
+  srtUrl: null,
+  errorMessage: null,
+}
+
+const INITIAL_STATE: ProjectState = {
+  fileId: null,
+  fileName: null,
+  fileUrl: null,
+  videoPath: null,
+  duration: 0,
+  startTime: 0,
+  endTime: 0,
+  aspectRatio: "9:16_fit",
+  subtitlesEnabled: false,
+  subtitleStyle: "bold_tiktok",
+  customSubtitles: "",
+  transcriptWords: null,
+  videoFilter: "cinema_intense",
+  outputFormat: "mp4",
+  ...JOB_RESET,
+}
+
 export default function StepWizard() {
   const [currentStep, setCurrentStep] = React.useState(0)
   
-  const [state, setState] = React.useState<ProjectState>({
-    fileId: null,
-    fileName: null,
-    fileUrl: null,
-    videoPath: null,
-    duration: 0,
-    startTime: 0,
-    endTime: 0,
-    aspectRatio: "9:16",
-    subtitlesEnabled: false,
-    subtitleStyle: "bold_tiktok",
-    customSubtitles: "",
-    videoFilter: "cinema_intense",
-    outputFormat: "mp4",
-    jobId: null,
-    jobStatus: "idle",
-    jobProgress: 0,
-    outputUrl: null,
-    errorMessage: null,
-  })
+  const [state, setState] = React.useState<ProjectState>(INITIAL_STATE)
 
   const updateState = (updates: Partial<ProjectState>) => {
     setState((prev) => ({ ...prev, ...updates }))
@@ -75,26 +98,37 @@ export default function StepWizard() {
   const handleResetToHome = () => {
     if (pollRef.current) clearInterval(pollRef.current)
     setCurrentStep(0)
-    setState({
-      fileId: null,
-      fileName: null,
-      fileUrl: null,
-      videoPath: null,
-      duration: 0,
-      startTime: 0,
-      endTime: 0,
-      aspectRatio: "9:16",
-      subtitlesEnabled: false,
-      subtitleStyle: "bold_tiktok",
-      customSubtitles: "",
-      videoFilter: "cinema_intense",
-      outputFormat: "mp4",
-      jobId: null,
-      jobStatus: "idle",
-      jobProgress: 0,
-      outputUrl: null,
-      errorMessage: null,
+    setState(INITIAL_STATE)
+  }
+
+  // Keep the file, clear the finished job and go back to Trim for another clip.
+  const handleNewClip = () => {
+    if (pollRef.current) clearInterval(pollRef.current)
+    updateState(JOB_RESET)
+    setCurrentStep(1)
+  }
+
+  const handleTrimChange = (start: number, end: number) => {
+    setState((prev) => {
+      const changed = start !== prev.startTime || end !== prev.endTime
+      // A Whisper transcript belongs to the old segment: drop it so the
+      // Subtitles step re-transcribes. Pasted lyrics (no transcript) are kept.
+      const staleTranscript = changed && prev.transcriptWords !== null
+      return {
+        ...prev,
+        startTime: start,
+        endTime: end,
+        ...(staleTranscript ? { customSubtitles: "", transcriptWords: null } : {}),
+      }
     })
+  }
+
+  const handleRandomLook = () => {
+    setState((prev) => ({
+      ...prev,
+      videoFilter: pickRandom(VIDEO_FILTERS.map((f) => f.value), prev.videoFilter),
+      subtitleStyle: pickRandom(SUBTITLE_STYLES.map((s) => s.value), prev.subtitleStyle),
+    }))
   }
 
   const isStepValid = () => {
@@ -134,6 +168,7 @@ export default function StepWizard() {
           subtitles_enabled: state.subtitlesEnabled,
           style_preset: state.subtitleStyle,
           custom_subtitles: state.customSubtitles.trim() ? state.customSubtitles : null,
+          reference_words: state.customSubtitles.trim() ? state.transcriptWords : null,
           video_filter: state.videoFilter,
           output_format: state.outputFormat,
         }),
@@ -168,6 +203,8 @@ export default function StepWizard() {
               jobStatus: "completed",
               jobProgress: 100,
               outputUrl: statusData.output_url,
+              vttUrl: statusData.vtt_url || null,
+              srtUrl: statusData.srt_url || null,
             })
           } else if (statusData.status === "failed") {
             if (pollRef.current) clearInterval(pollRef.current)
@@ -264,9 +301,12 @@ export default function StepWizard() {
         {currentStep === 0 && (
           <ImportStep
             onFileImported={(fileId, fileName, fileUrl, duration, videoPath) => {
-              updateState({ 
+              updateState({
                 fileId, fileName, fileUrl, duration, videoPath,
-                endTime: duration 
+                startTime: 0,
+                endTime: duration,
+                customSubtitles: "",
+                transcriptWords: null,
               })
             }}
           />
@@ -274,15 +314,17 @@ export default function StepWizard() {
         
         {currentStep === 1 && (
           <TrimStep
+            fileId={state.fileId}
             fileUrl={state.fileUrl}
             duration={state.duration}
             startTime={state.startTime}
             endTime={state.endTime}
             aspectRatio={state.aspectRatio}
             videoFilter={state.videoFilter}
-            onTrimChange={(start, end) => updateState({ startTime: start, endTime: end })}
+            onTrimChange={handleTrimChange}
             onAspectRatioChange={(ratio) => updateState({ aspectRatio: ratio })}
             onVideoFilterChange={(filter) => updateState({ videoFilter: filter })}
+            onRandomLook={handleRandomLook}
           />
         )}
         
@@ -296,10 +338,12 @@ export default function StepWizard() {
             subtitlesEnabled={state.subtitlesEnabled}
             subtitleStyle={state.subtitleStyle}
             videoFilter={state.videoFilter}
+            aspectRatio={state.aspectRatio}
             customSubtitles={state.customSubtitles}
             onToggle={(enabled) => updateState({ subtitlesEnabled: enabled })}
             onStyleChange={(style) => updateState({ subtitleStyle: style })}
             onCustomSubtitlesChange={(text) => updateState({ customSubtitles: text })}
+            onTranscriptChange={(words) => updateState({ transcriptWords: words })}
           />
         )}
 
@@ -308,6 +352,7 @@ export default function StepWizard() {
             {...state}
             onProcess={handleProcess}
             onDownload={handleDownload}
+            onNewClip={handleNewClip}
             onFormatChange={(format) => updateState({ outputFormat: format })}
           />
         )}

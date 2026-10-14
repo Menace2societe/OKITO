@@ -5,16 +5,19 @@ import { Play, Pause } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-export type AspectRatio = "9:16" | "1:1" | "16:9"
-export type VideoFilter = "cinema_intense" | "vibrant_social" | "bw_deep" | "none"
+export type AspectRatio = "9:16" | "9:16_fit" | "1:1" | "16:9"
+export type { VideoFilter } from "@/lib/presets"
 
 // CSS approximations of the FFmpeg filter chains, applied instantly (0 ms)
 // on the <video> element so the preview matches the final render.
 export const FILTER_STYLES: Record<string, React.CSSProperties> = {
   none: {},
   // ClipFlow backend filters
-  cinema_intense: { filter: "contrast(125%) saturate(135%) brightness(98%)" },
-  vibrant_social: { filter: "contrast(115%) saturate(140%)" },
+  cinema_intense: { filter: "contrast(120%) saturate(125%) brightness(98%) sepia(8%)" },
+  vibrant_social: { filter: "contrast(110%) saturate(135%) brightness(102%)" },
+  warm_vlog: { filter: "sepia(22%) saturate(115%) contrast(106%) brightness(104%)" },
+  cold_teal: { filter: "hue-rotate(15deg) saturate(90%) contrast(115%) brightness(96%)" },
+  vintage_film: { filter: "sepia(35%) contrast(92%) saturate(80%) brightness(98%)" },
   bw_deep: { filter: "grayscale(100%) contrast(130%) brightness(97%)" },
   // Generic aliases (kept for compatibility with external filter sets)
   black_white: { filter: "grayscale(100%) contrast(110%)" },
@@ -27,6 +30,7 @@ export const FILTER_STYLES: Record<string, React.CSSProperties> = {
 
 const PREVIEW_SIZES: Record<AspectRatio, { width: number; height: number }> = {
   "9:16": { width: 236, height: 420 },
+  "9:16_fit": { width: 236, height: 420 },
   "1:1": { width: 380, height: 380 },
   "16:9": { width: 640, height: 360 },
 }
@@ -142,7 +146,10 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
               controls={showControls}
               preload="metadata"
               crossOrigin="anonymous"
-              className="h-full w-full object-cover"
+              className={cn(
+                "h-full w-full",
+                aspectRatio === "9:16_fit" ? "object-contain" : "object-cover"
+              )}
               style={FILTER_STYLES[selectedFilter] ?? {}}
               onLoadedMetadata={() => {
                 const video = videoRef.current

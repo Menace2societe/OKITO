@@ -8,20 +8,54 @@ logger = logging.getLogger(__name__)
 
 ASPECT_RATIOS = {
     "9:16": "scale=-2:1920,crop=1080:1920",
+    # 9:16_fit keeps the full frame (no crop) and fills letterbox bars with a
+    # blurred copy of the video. The actual filter_complex is built in
+    # process_video() because it requires stream splitting.
+    "9:16_fit": None,
     "1:1": r"crop=min(iw\,ih):min(iw\,ih),scale=1080:1080",
     "16:9": "scale=1920:-2,crop=1920:1080"
 }
 
 # Dynamic colour-grade filter chains selected from the frontend.
+# A light unsharp pass is added to most looks: social platforms re-encode
+# uploads aggressively, and a touch of sharpening survives that better.
+_SHARPEN = "unsharp=5:5:0.6:5:5:0.0"
+
 VIDEO_FILTERS = {
+    # Teal & orange blockbuster look with a soft vignette.
     "cinema_intense": (
-        "eq=contrast=1.25:brightness=-0.02:saturation=1.35,"
-        "colorbalance=rs=0.08:gs=-0.02:bs=-0.08:rm=0.05:bm=-0.05"
+        "eq=contrast=1.20:brightness=-0.02:saturation=1.25,"
+        "colorbalance=rs=0.08:gs=-0.02:bs=-0.08:rm=0.05:bm=-0.05:rh=0.04:bh=-0.06,"
+        f"vignette=PI/5,{_SHARPEN}"
     ),
-    "vibrant_social": "eq=contrast=1.15:brightness=0.00:saturation=1.40",
-    "bw_deep": "hue=s=0,eq=contrast=1.30:brightness=-0.03",
+    # Punchy colours that keep skin tones natural (vibrance > saturation).
+    "vibrant_social": (
+        "eq=contrast=1.10:brightness=0.02:saturation=1.15,"
+        f"vibrance=intensity=0.35,{_SHARPEN}"
+    ),
+    # Golden-hour vlog look.
+    "warm_vlog": (
+        "colortemperature=temperature=4800:mix=0.6,"
+        f"eq=contrast=1.06:brightness=0.03:saturation=1.12,{_SHARPEN}"
+    ),
+    # Cold blue/teal night look.
+    "cold_teal": (
+        "colortemperature=temperature=9000:mix=0.5,"
+        "eq=contrast=1.15:brightness=-0.03:saturation=0.95,"
+        f"vignette=PI/6,{_SHARPEN}"
+    ),
+    # Faded film with grain and vignette.
+    "vintage_film": (
+        "curves=preset=vintage,eq=contrast=0.95:saturation=0.85,"
+        "noise=alls=8:allf=t,vignette=PI/4"
+    ),
+    # High-contrast monochrome with fine grain.
+    "bw_deep": f"hue=s=0,eq=contrast=1.30:brightness=-0.03,noise=alls=5:allf=t,{_SHARPEN}",
     "none": None,
 }
+
+# EBU R128 loudness target used by TikTok / Reels / Shorts (~-14 LUFS).
+AUDIO_LOUDNORM = "loudnorm=I=-14:TP=-1.5:LRA=11"
 
 DEFAULT_VIDEO_FILTER = "cinema_intense"
 
@@ -137,6 +171,40 @@ def _ass_path_for_ffmpeg(ass_path: str) -> str:
     return rel.replace("\\", "/")
 
 
+def _build_fit_blur_filter(
+    color_filter: Optional[str],
+    ass_path: Optional[str],
+) -> str:
+    """Build the -filter_complex string for 9:16_fit (fit + blur background).
+
+    Graph:
+      [0:v] ─► scale-up + crop 1080×1920 ─► boxblur ─► [bg]
+      [0:v] ─► scale-down (fit inside 1080×1920) ─► [fg]
+      [bg][fg] overlay centred ─► (colour grade) ─► (ass) ─► [out]
+    """
+    parts = [
+        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+        "crop=1080:1920,boxblur=20:5[bg]",
+        "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg]",
+    ]
+
+    # Post-overlay chain: colour grade, then ASS burn-in.
+    post: list[str] = []
+    if color_filter:
+        post.append(color_filter)
+    if ass_path:
+        rel_ass = _ass_path_for_ffmpeg(os.path.abspath(ass_path))
+        post.append(f"ass={rel_ass}")
+
+    overlay = "[bg][fg]overlay=(W-w)/2:(H-h)/2"
+    if post:
+        overlay += "," + ",".join(post)
+    overlay += "[out]"
+    parts.append(overlay)
+
+    return ";".join(parts)
+
+
 def process_video(
     input_path: str,
     output_path: str,
@@ -146,22 +214,13 @@ def process_video(
     ass_path: Optional[str] = None,
     video_filter: str = DEFAULT_VIDEO_FILTER,
 ) -> str:
-    """Trim, crop, optionally colour-grade, burn subtitles, and encode."""
+    """Trim, crop/fit, optionally colour-grade, burn subtitles, and encode."""
     abs_input = os.path.abspath(input_path)
     abs_output = os.path.abspath(output_path)
 
-    # Build video filter chain: framing first, then optional colour grade.
-    vf_parts = [ASPECT_RATIOS.get(aspect_ratio, ASPECT_RATIOS["16:9"])]
+    use_filter_complex = (aspect_ratio == "9:16_fit")
 
-    filter_chain = VIDEO_FILTERS.get(video_filter, VIDEO_FILTERS[DEFAULT_VIDEO_FILTER])
-    if filter_chain:
-        vf_parts.append(filter_chain)
-
-    if ass_path:
-        rel_ass = _ass_path_for_ffmpeg(os.path.abspath(ass_path))
-        vf_parts.append(f"ass={rel_ass}")
-
-    vf_chain = ",".join(vf_parts)
+    color_filter = VIDEO_FILTERS.get(video_filter, VIDEO_FILTERS[DEFAULT_VIDEO_FILTER])
 
     # Pick encoder settings based on the requested output container.
     ext = os.path.splitext(abs_output)[1].lower()
@@ -180,7 +239,8 @@ def process_video(
         output_options = [
             "-c:v", "libx264",
             "-preset", "fast",
-            "-crf", "23",
+            # CRF 20: platforms re-compress uploads, so start from more detail.
+            "-crf", "20",
             "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-b:a", "192k",
@@ -196,11 +256,52 @@ def process_video(
         "-to", str(end_time),
         "-i", abs_input,
     ]
+
     if ext != ".mp3":
-        cmd += ["-vf", vf_chain]
-    cmd += [*output_options, abs_output]
+        if use_filter_complex:
+            # 9:16_fit — full frame on blurred background via filter_complex
+            fc = _build_fit_blur_filter(color_filter, ass_path)
+            cmd += ["-filter_complex", fc, "-map", "[out]", "-map", "0:a?"]
+        else:
+            # Standard simple -vf pipeline (crop / scale)
+            vf_parts = [ASPECT_RATIOS.get(aspect_ratio, ASPECT_RATIOS["16:9"])]
+            if color_filter:
+                vf_parts.append(color_filter)
+            if ass_path:
+                rel_ass = _ass_path_for_ffmpeg(os.path.abspath(ass_path))
+                vf_parts.append(f"ass={rel_ass}")
+            cmd += ["-vf", ",".join(vf_parts)]
+
+    cmd += ["-af", AUDIO_LOUDNORM, *output_options, abs_output]
 
     _run_cmd(cmd, label="ffmpeg:process_video")
     return abs_output
 
 
+def detect_silences(
+    input_path: str,
+    noise_db: float = -30.0,
+    min_silence: float = 0.35,
+) -> list[tuple[float, float]]:
+    """Return (start, end) silence intervals found in the audio track."""
+    cmd = [
+        _find_ffmpeg(),
+        "-hide_banner", "-nostats",
+        "-i", os.path.abspath(input_path),
+        "-vn", "-sn", "-dn",
+        "-ac", "1", "-ar", "16000",
+        "-af", f"silencedetect=noise={noise_db}dB:d={min_silence}",
+        "-f", "null", "-",
+    ]
+    result = _run_cmd(cmd, label="ffmpeg:silencedetect")
+
+    silences: list[tuple[float, float]] = []
+    pending_start: Optional[float] = None
+    for line in result.stderr.splitlines():
+        if "silence_start:" in line:
+            pending_start = float(line.split("silence_start:")[1].split()[0])
+        elif "silence_end:" in line and pending_start is not None:
+            end = float(line.split("silence_end:")[1].split()[0])
+            silences.append((pending_start, end))
+            pending_start = None
+    return silences

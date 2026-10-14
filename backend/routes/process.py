@@ -29,6 +29,9 @@ class ProcessRequest(BaseModel):
     # Optional manually edited / pasted subtitles: a raw string or a list of
     # {"text", "start", "end"} segments. When set, Whisper is skipped.
     custom_subtitles: Optional[Union[str, List[Any]]] = None
+    # Whisper words (clip-relative) from /api/transcribe: lets edited custom
+    # text keep the real speech timing instead of an even distribution.
+    reference_words: Optional[List[Dict[str, Any]]] = None
     output_format: str
 
 
@@ -76,13 +79,11 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
                     "[process] 2/3 — Sous-titres personnalisés fournis : "
                     "transcription Whisper ignorée."
                 )
-                line_count = subtitle_service.generate_ass_from_custom(
+                lines = subtitle_service.custom_to_lines(
                     custom_subtitles=request.custom_subtitles,
-                    output_path=ass_path,
-                    aspect_ratio=request.aspect_ratio,
-                    style_preset=request.style_preset,
                     start_time=request.start_time,
                     end_time=request.end_time,
+                    reference_words=request.reference_words,
                 )
             else:
                 # 2a. Audio extraction ---------------------------------
@@ -134,13 +135,18 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
 
                 # 2c. ASS generation -----------------------------------
                 jobs[job_id]["progress"] = 60
-                line_count = subtitle_service.generate_ass(
-                    words, ass_path, request.aspect_ratio, request.style_preset
-                )
+                lines = subtitle_service.words_to_lines(words)
 
                 # Clean up temp audio
                 if os.path.exists(audio_path):
                     os.remove(audio_path)
+
+            # Same lines for the burned-in ASS, the HTML5 VTT and the SRT export.
+            line_count = subtitle_service.write_ass_lines(
+                lines, ass_path, request.aspect_ratio, request.style_preset
+            )
+            subtitle_service.write_cues(lines, os.path.join(MEDIA_DIR, f"{job_id}.vtt"), "vtt")
+            subtitle_service.write_cues(lines, os.path.join(MEDIA_DIR, f"{job_id}.srt"), "srt")
 
             logger.info(
                 "[process] 3/3 — Fichier .ass créé : %s (%d ligne(s) de dialogue)",
@@ -175,6 +181,9 @@ def process_video_task(job_id: str, request: ProcessRequest) -> None:
         jobs[job_id]["progress"] = 100
         jobs[job_id]["status"] = "completed"
         jobs[job_id]["output_url"] = f"/api/files/{output_filename}"
+        if request.subtitles_enabled:
+            jobs[job_id]["vtt_url"] = f"/api/files/{job_id}.vtt"
+            jobs[job_id]["srt_url"] = f"/api/files/{job_id}.srt"
         logger.info("[process] ✅ Traitement terminé : %s", output_filename)
         print(f"[process] ✅ Traitement terminé : {output_filename}")
 
@@ -251,7 +260,7 @@ def _resolve_input_path(
 
 
 @router.post("/transcribe")
-async def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
+def transcribe(request: TranscribeRequest) -> Dict[str, Any]:
     """Transcribe the selected segment with Whisper and return editable text."""
     audio_path: Optional[str] = None
     try:

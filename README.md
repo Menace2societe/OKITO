@@ -7,10 +7,16 @@ réseaux sociaux — le tout sans service cloud.
 ## Fonctionnalités
 
 - **Import** : fichier local (`.mp4`, `.mkv`, `.mov`, `.mp3`) ou lien (YouTube, etc.).
-- **Trim / Édition** : sélection de la séquence, cadrage 9:16 / 1:1 / 16:9 et
-  filtres vidéo (Cinéma Intense, Vibrant Social, Noir & Blanc Profond, Aucun).
-- **Sous-titres** : transcription locale via Whisper et 3 presets ASS
-  (Bold TikTok, Neon Yellow, Minimal Clean).
+- **Trim / Édition** : sélection de la séquence, cadrage 9:16 (vidéo entière
+  sur fond flou ou crop) / 1:1 / 16:9 et 7 filtres vidéo (Cinéma Intense,
+  Vibrant Social, Warm Vlog, Cold Teal, Vintage Film, Noir & Blanc Profond, Aucun).
+- **Clip aléatoire** : extrait de 15–30 s, 30–60 s ou 60–90 s tiré au hasard et
+  calé sur les pauses de la voix (`silencedetect`) ; « Look aléatoire » tire un
+  filtre et un style de sous-titres.
+- **Sous-titres** : transcription locale via Whisper, mot prononcé surligné
+  (effet TikTok) et 4 presets ASS (Bold TikTok, Neon Yellow, Impact Pop,
+  Minimal Clean). Le texte corrigé garde le timing exact de la voix.
+- **Audio** : normalisation EBU R128 à -14 LUFS (niveau TikTok / Reels / Shorts).
 - **Prévisualisation** : lecteur HTML5 intégré aux étapes Trim et Subtitles pour
   valider le cadrage avant le rendu.
 - **Export** : rendu FFmpeg en MP4, MKV ou MP3.
@@ -59,4 +65,5 @@ backend/
 
 Les filtres vidéo sont définis dans `backend/services/ffmpeg_service.py`
 (`VIDEO_FILTERS`) et les presets de sous-titres dans
-`backend/services/subtitle_service.py` (`ASS_STYLE_PRESETS`).
+`backend/services/subtitle_service.py` (`ASS_STYLE_PRESETS`). Les libellés
+côté interface sont dans `lib/presets.ts` : les clés doivent correspondre.

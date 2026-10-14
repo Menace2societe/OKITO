@@ -1,47 +1,26 @@
 "use client"
 
 import * as React from "react"
-import { Wand2, Download, CheckCircle, Loader2 } from "lucide-react"
+import { Wand2, Download, CheckCircle, Loader2, Dices } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
+import type { ProjectState } from "@/components/step-wizard"
+import { SUBTITLE_STYLES, VIDEO_FILTERS } from "@/lib/presets"
 
-interface ProjectState {
-  fileId: string | null;
-  fileName: string | null;
-  fileUrl: string | null;
-  duration: number;
-  startTime: number;
-  endTime: number;
-  aspectRatio: "9:16" | "1:1" | "16:9";
-  subtitlesEnabled: boolean;
-  subtitleStyle: "bold_tiktok" | "neon_yellow" | "minimal_clean";
-  videoFilter: "cinema_intense" | "vibrant_social" | "bw_deep" | "none";
-  outputFormat: "mp4" | "mp3" | "mkv";
-  jobId: string | null;
-  jobStatus: "idle" | "processing" | "completed" | "error";
-  jobProgress: number;
-  outputUrl: string | null;
-  errorMessage: string | null;
-}
+const SUBTITLE_STYLE_LABELS = Object.fromEntries(
+  SUBTITLE_STYLES.map((s) => [s.value, s.label])
+) as Record<ProjectState["subtitleStyle"], string>
 
-const SUBTITLE_STYLE_LABELS: Record<ProjectState["subtitleStyle"], string> = {
-  bold_tiktok: "Bold TikTok",
-  neon_yellow: "Neon Yellow",
-  minimal_clean: "Minimal Clean",
-}
-
-const VIDEO_FILTER_LABELS: Record<ProjectState["videoFilter"], string> = {
-  cinema_intense: "Cinéma Intense",
-  vibrant_social: "Vibrant Social",
-  bw_deep: "Noir & Blanc Profond",
-  none: "Aucun",
-}
+const VIDEO_FILTER_LABELS = Object.fromEntries(
+  VIDEO_FILTERS.map((f) => [f.value, f.label])
+) as Record<ProjectState["videoFilter"], string>
 
 interface ExportStepProps extends ProjectState {
   onProcess: () => void;
   onDownload: () => void;
+  onNewClip: () => void;
   onFormatChange: (format: "mp4" | "mp3" | "mkv") => void;
 }
 
@@ -59,6 +38,7 @@ export function ExportStep(props: ExportStepProps) {
     jobProgress,
     onProcess,
     onDownload,
+    onNewClip,
     onFormatChange,
   } = props
 
@@ -146,14 +126,43 @@ export function ExportStep(props: ExportStepProps) {
       )}
 
       {jobStatus === "completed" && (
-        <Button
-          size="lg"
-          className="w-full text-lg h-14 bg-green-600 hover:bg-green-700 text-white"
-          onClick={onDownload}
-        >
-          <CheckCircle className="mr-2 h-5 w-5" />
-          Télécharger le fichier
-        </Button>
+        <div className="space-y-3">
+          <Button
+            size="lg"
+            className="w-full text-lg h-14 bg-green-600 hover:bg-green-700 text-white"
+            onClick={onDownload}
+          >
+            <CheckCircle className="mr-2 h-5 w-5" />
+            Télécharger le fichier
+          </Button>
+          {(props.vttUrl || props.srtUrl) && (
+            <div className="flex items-center justify-center gap-4 text-sm">
+              <span className="text-muted-foreground">Sous-titres :</span>
+              {props.srtUrl && (
+                <a
+                  href={props.srtUrl}
+                  download
+                  className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+                >
+                  .srt
+                </a>
+              )}
+              {props.vttUrl && (
+                <a
+                  href={props.vttUrl}
+                  download
+                  className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+                >
+                  .vtt
+                </a>
+              )}
+            </div>
+          )}
+          <Button variant="outline" className="w-full" onClick={onNewClip}>
+            <Dices className="mr-2 h-4 w-4" />
+            Créer un autre clip de cette vidéo
+          </Button>
+        </div>
       )}
 
       {jobStatus === "error" && (

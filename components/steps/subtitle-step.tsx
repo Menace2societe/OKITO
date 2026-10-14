@@ -7,10 +7,9 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { PreviewPlayer, type VideoFilter } from "@/components/preview-player"
+import { PreviewPlayer, type AspectRatio, type VideoFilter } from "@/components/preview-player"
 import { cn } from "@/lib/utils"
-
-type SubtitleStyle = "bold_tiktok" | "neon_yellow" | "minimal_clean"
+import { SUBTITLE_STYLES, type SubtitleStyle, type TranscriptWord } from "@/lib/presets"
 
 interface SubtitleStepProps {
   fileId: string | null;
@@ -21,40 +20,17 @@ interface SubtitleStepProps {
   subtitlesEnabled: boolean;
   subtitleStyle: SubtitleStyle;
   videoFilter: VideoFilter;
+  aspectRatio: AspectRatio;
   customSubtitles: string;
   onToggle: (enabled: boolean) => void;
   onStyleChange: (style: SubtitleStyle) => void;
   onCustomSubtitlesChange: (text: string) => void;
+  /** Whisper words (clip-relative) — kept so edits stay in sync with speech. */
+  onTranscriptChange: (words: TranscriptWord[] | null) => void;
 }
 
 const MAX_WORDS_PER_LINE = 4
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000
-
-const SUBTITLE_PRESETS: {
-  value: SubtitleStyle
-  label: string
-  description: string
-  sampleClass: string
-}[] = [
-  {
-    value: "bold_tiktok",
-    label: "Bold TikTok",
-    description: "Blanc, contour noir épais (Outline 3), taille 72",
-    sampleClass: "font-extrabold text-white",
-  },
-  {
-    value: "neon_yellow",
-    label: "Neon Yellow",
-    description: "Jaune vif, contour noir, style dynamique",
-    sampleClass: "font-extrabold text-yellow-300",
-  },
-  {
-    value: "minimal_clean",
-    label: "Minimal Clean",
-    description: "Blanc pur, ombre légère (Shadow 1), taille 60",
-    sampleClass: "font-medium text-white",
-  },
-]
 
 function normalizeSubtitleText(text: string): string {
   const words = text.split(/\s+/).filter(Boolean)
@@ -74,10 +50,12 @@ export function SubtitleStep({
   subtitlesEnabled,
   subtitleStyle,
   videoFilter,
+  aspectRatio,
   customSubtitles,
   onToggle,
   onStyleChange,
   onCustomSubtitlesChange,
+  onTranscriptChange,
 }: SubtitleStepProps) {
   const [loadingTranscribe, setLoadingTranscribe] = React.useState(false)
   const [transcribeError, setTranscribeError] = React.useState<string | null>(null)
@@ -121,6 +99,7 @@ export function SubtitleStep({
         throw new Error(data.detail || "Erreur lors de la génération des sous-titres.")
       }
       onCustomSubtitlesChange(normalizeSubtitleText(data.text || ""))
+      onTranscriptChange(Array.isArray(data.words) ? data.words : null)
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         setTranscribeError(
@@ -143,11 +122,12 @@ export function SubtitleStep({
   // Auto-load the initial transcription once, when subtitles are enabled and
   // the field is still empty (e.g. arriving on the Subtitles step).
   const autoLoadedSource = React.useRef<string | null>(null)
-  const sourceKey = videoPath || fileId || ""
+  // Re-transcribe when the trim changes: the old text belongs to another segment.
+  const sourceKey = `${videoPath || fileId || ""}@${startTime}-${endTime}`
 
   React.useEffect(() => {
     if (!subtitlesEnabled) return
-    if (!sourceKey) return
+    if (!videoPath && !fileId) return
     if (customSubtitles.trim()) return
     if (loadingTranscribe) return
     if (autoLoadedSource.current === sourceKey) return
@@ -158,7 +138,7 @@ export function SubtitleStep({
   }, [subtitlesEnabled, sourceKey, customSubtitles, loadingTranscribe])
 
   const wordCount = customSubtitles.split(/\s+/).filter(Boolean).length
-  const activePreset = SUBTITLE_PRESETS.find((p) => p.value === subtitleStyle)
+  const activePreset = SUBTITLE_STYLES.find((p) => p.value === subtitleStyle)
 
   return (
     <div className="space-y-6">
@@ -183,13 +163,13 @@ export function SubtitleStep({
           <PreviewPlayer
             src={fileUrl}
             selectedFilter={videoFilter}
-            aspectRatio="9:16"
+            aspectRatio={aspectRatio}
             startTime={startTime}
             endTime={endTime}
             showControls={false}
             caption={
               <p className="text-xs text-muted-foreground">
-                Aperçu du cadrage 9:16, du filtre et du placement des sous-titres
+                Aperçu du cadrage {aspectRatio}, du filtre et du placement des sous-titres
               </p>
             }
           >
@@ -203,11 +183,14 @@ export function SubtitleStep({
                     "drop-shadow-[0_0_2px_#000] [text-shadow:0_0_3px_#000,0_0_3px_#000]",
                   subtitleStyle === "neon_yellow" &&
                     "[text-shadow:0_0_4px_#000,0_0_4px_#000]",
+                  subtitleStyle === "impact_pop" &&
+                    "[text-shadow:0_0_4px_#000,0_0_4px_#000,0_0_4px_#000]",
                   subtitleStyle === "minimal_clean" &&
                     "drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
                 )}
               >
-                Aperçu du sous-titre
+                Aperçu du{" "}
+                <span className={cn(activePreset?.highlightClass)}>sous-titre</span>
               </span>
             </div>
           </PreviewPlayer>
@@ -223,8 +206,9 @@ export function SubtitleStep({
             </div>
             <p className="text-sm text-muted-foreground">
               Corrigez la transcription ou collez vos paroles. Le texte est
-              automatiquement découpé en lignes de {MAX_WORDS_PER_LINE} mots et
-              le timing est réparti sur la durée de l&apos;extrait.
+              découpé en lignes de {MAX_WORDS_PER_LINE} mots. Les mots corrigés
+              gardent le timing de la voix détecté par Whisper ; un texte collé
+              sans transcription est réparti sur la durée de l&apos;extrait.
             </p>
             <textarea
               id="custom-subtitles"
@@ -265,7 +249,7 @@ export function SubtitleStep({
             {loadingTranscribe && (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Whisper analyse l&apos;audio avec le modèle medium sur GPU, ou small/int8 sur CPU. Cela peut prendre quelques minutes.
+                Whisper analyse l&apos;audio de l&apos;extrait. Cela peut prendre quelques minutes sur CPU.
               </p>
             )}
             {transcribeError && (
@@ -293,8 +277,8 @@ export function SubtitleStep({
 
           <div className="space-y-3">
             <h3 className="font-semibold">Style des sous-titres</h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {SUBTITLE_PRESETS.map((preset) => (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {SUBTITLE_STYLES.map((preset) => (
                 <Card
                   key={preset.value}
                   className={cn(
