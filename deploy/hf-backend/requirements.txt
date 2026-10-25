@@ -1,0 +1,13 @@
+# Backend dependencies for the Space. gradio, fastapi and uvicorn come with
+# the Space itself (sdk_version in README.md), so they are not pinned here.
+python-multipart==0.0.20
+aiofiles==24.1.0
+faster-whisper==1.1.0
+# faster-whisper 1.1.0 passes metadata_errors to av.open(), which PyAV 19 removed
+av==18.1.0
+yt-dlp[default]>=2026.08.19
+opencv-python-headless>=4.10,<5
+numpy>=2.0
+anthropic>=1.13
+# No demucs: vocal isolation is too slow without a dedicated CPU, and
+# backend.services.vocal_isolation skips it when the package is missing.

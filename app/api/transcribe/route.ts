@@ -1,3 +1,5 @@
+import { backendHeaders } from "@/lib/backend-proxy"
+
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -9,10 +11,10 @@ export async function POST(request: Request) {
     const body = await request.text()
     const upstream = await fetch(`${BACKEND_URL}/api/transcribe`, {
       method: "POST",
-      headers: {
+      headers: backendHeaders({
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
-      },
+      }),
       body,
       cache: "no-store",
     })

@@ -1,8 +1,10 @@
+import { apiFetch } from "@/lib/backend"
+
 const MAX_NETWORK_FAILURES = 15
 
-// Polls a backend job URL until `isDone` returns true. Returns a cancel function.
+// Polls a backend job path until `isDone` returns true. Returns a cancel function.
 export function pollJob<T>(
-  url: string,
+  path: string,
   onUpdate: (data: T) => void,
   isDone: (data: T) => boolean,
   onError: (message: string) => void,
@@ -15,7 +17,7 @@ export function pollJob<T>(
   const tick = async () => {
     let res: Response
     try {
-      res = await fetch(url, { cache: "no-store" })
+      res = await apiFetch(path, { cache: "no-store" })
     } catch {
       // Network blip (phone waking up, Wi-Fi switch): the job keeps running
       // server-side, so retry for a while before giving up.
@@ -46,8 +48,8 @@ export function pollJob<T>(
   }
 }
 
-export async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
+export async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await apiFetch(path, {
     method: "POST",
     cache: "no-store",
     headers: { "Content-Type": "application/json" },

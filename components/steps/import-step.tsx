@@ -4,6 +4,8 @@ import * as React from "react"
 import { Upload, Link as LinkIcon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { usePcStatus } from "@/components/use-pc-status"
+import { apiFetch, mediaUrl, selectBackend } from "@/lib/backend"
 
 interface ImportStepProps {
   onFileImported: (
@@ -20,6 +22,9 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
   const [loading, setLoading] = React.useState(false)
   const [url, setUrl] = React.useState("")
   const inputRef = React.useRef<HTMLInputElement>(null)
+  // Online, YouTube links are downloaded by the PC: it must be on.
+  const pcStatus = usePcStatus()
+  const linksAvailable = pcStatus === "local" || pcStatus === "online"
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -55,7 +60,8 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
     try {
       const formData = new FormData()
       formData.append("file", file)
-      const res = await fetch("/api/upload", { method: "POST", body: formData })
+      selectBackend("cloud")
+      const res = await apiFetch("/api/upload", { method: "POST", body: formData })
 
       if (!res.ok) {
         // Try to parse JSON error, fall back to status text if body isn't JSON
@@ -70,7 +76,7 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
       }
 
       const data = await res.json()
-      onFileImported(data.file_id, data.original_name, data.preview_url, data.duration, data.video_path)
+      onFileImported(data.file_id, data.original_name, mediaUrl(data.preview_url) ?? "", data.duration, data.video_path)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur inconnue")
     } finally {
@@ -83,7 +89,8 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/download-url", {
+      selectBackend("pc")
+      const res = await apiFetch("/api/download-url", {
         method: "POST",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
@@ -102,7 +109,7 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
         throw new Error(data.detail || "Erreur lors du téléchargement de la vidéo.")
       }
 
-      onFileImported(data.file_id, data.title, data.preview_url, data.duration, data.video_path)
+      onFileImported(data.file_id, data.title, mediaUrl(data.preview_url) ?? "", data.duration, data.video_path)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur inconnue")
     } finally {
@@ -155,14 +162,29 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
         </div>
       </div>
 
+      {pcStatus !== "local" && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              pcStatus === "online" ? "bg-green-500" : pcStatus === "checking" ? "bg-muted-foreground" : "bg-destructive"
+            }`}
+          />
+          {pcStatus === "online"
+            ? "PC en ligne : les liens YouTube sont disponibles."
+            : pcStatus === "checking"
+              ? "Vérification du PC…"
+              : "PC éteint : les liens YouTube sont indisponibles. Importez le fichier à la place."}
+        </p>
+      )}
+
       <div className="flex space-x-2">
         <Input
           placeholder="https://youtube.com/..."
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          disabled={loading}
+          disabled={loading || !linksAvailable}
         />
-        <Button onClick={handleUrlSubmit} disabled={loading || !url}>
+        <Button onClick={handleUrlSubmit} disabled={loading || !url || !linksAvailable}>
           {loading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (

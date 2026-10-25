@@ -41,6 +41,13 @@ réseaux sociaux — le tout sans service cloud.
 | `CLIPFLOW_LLM` | `on` | `off` pour forcer le score local |
 | `CLIPFLOW_LLM_MODEL` | `claude-opus-5-5` | Modèle utilisé pour les meilleurs moments |
 | `MEDIA_RETENTION_DAYS` | `7` | Durée de conservation des fichiers média |
+| `CLIPFLOW_ACCESS_CODE` | — | Mode en ligne : code exigé dans l'en-tête `X-ClipFlow-Key` (sauf `/api/health`, `/api/files/…`, `/media/…`) |
+| `CLIPFLOW_CORS_ORIGINS` | `http://localhost:3000` | Domaines autorisés à appeler l'API depuis un navigateur, séparés par des virgules |
+| `CLIPFLOW_ROLE` | `pc` | `pc` ou `cloud`, renvoyé par `/api/health` |
+
+Sans ces trois variables, ClipFlow fonctionne en local exactement comme avant.
+Le backend en ligne (Space Hugging Face) est décrit dans
+`deploy/hf-backend/GUIDE.md`.
 
 ## Pile technique
 
@@ -83,6 +90,19 @@ Les deux serveurs n'écoutent que sur `127.0.0.1` : l'application est
 accessible sur ce PC (`http://localhost:3000`) et, via `tailscale serve`, depuis
 tes appareils Tailscale (`https://<nom-du-pc>.<tailnet>.ts.net`) — jamais depuis
 l'internet public. Les journaux sont dans `logs/`.
+
+### Liens YouTube depuis le site en ligne
+
+YouTube bloque les serveurs gratuits : en ligne, les liens YouTube sont
+téléchargés par ce PC. Pour l'activer, copier `.env.local.example` en
+`.env.local`, y mettre le code d'accès, puis relancer `.\start-clipflow.ps1`.
+Le script publie alors **le backend seul** sur internet avec
+`tailscale funnel` (port 8443) et affiche son adresse publique. Chaque requête
+doit porter le code ; le frontend local l'ajoute lui-même (`middleware.ts`,
+`lib/backend-proxy.ts`). Sans `.env.local`, rien n'est publié.
+
+Une seule fois : autoriser Funnel pour ce PC dans la console Tailscale
+(la première commande `tailscale funnel` affiche le lien à ouvrir).
 
 Démarrage automatique : un raccourci `ClipFlow.lnk` dans le dossier Démarrage
 de Windows (`shell:startup`) lance le script, masqué, à chaque ouverture de
