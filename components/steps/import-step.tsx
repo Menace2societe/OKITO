@@ -4,8 +4,9 @@ import * as React from "react"
 import { Upload, Link as LinkIcon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Progress } from "@/components/ui/progress"
 import { usePcStatus } from "@/components/use-pc-status"
-import { apiFetch, mediaUrl, selectBackend } from "@/lib/backend"
+import { apiFetch, apiUpload, mediaUrl, selectBackend } from "@/lib/backend"
 
 interface ImportStepProps {
   onFileImported: (
@@ -15,6 +16,10 @@ interface ImportStepProps {
     duration: number,
     videoPath: string
   ) => void;
+}
+
+function formatMb(bytes: number): string {
+  return (bytes / 1_000_000).toFixed(1).replace(".", ",")
 }
 
 export function ImportStep({ onFileImported }: ImportStepProps) {
@@ -53,15 +58,20 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
   }
 
   const [error, setError] = React.useState<string | null>(null)
+  // File being sent and the share already sent (0–1); null when idle.
+  const [upload, setUpload] = React.useState<{ name: string; size: number; sent: number } | null>(null)
 
   const processFile = async (file: File) => {
     setLoading(true)
     setError(null)
+    setUpload({ name: file.name, size: file.size, sent: 0 })
     try {
       const formData = new FormData()
       formData.append("file", file)
       selectBackend("cloud")
-      const res = await apiFetch("/api/upload", { method: "POST", body: formData })
+      const res = await apiUpload("/api/upload", formData, (sent) =>
+        setUpload({ name: file.name, size: file.size, sent }),
+      )
 
       if (!res.ok) {
         // Try to parse JSON error, fall back to status text if body isn't JSON
@@ -81,6 +91,7 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
       setError(e instanceof Error ? e.message : "Erreur inconnue")
     } finally {
       setLoading(false)
+      setUpload(null)
     }
   }
 
@@ -149,6 +160,19 @@ export function ImportStep({ onFileImported }: ImportStepProps) {
           </Button>
           <p className="text-xs text-muted-foreground">.mp4, .mkv, .mov, .mp3 acceptés</p>
         </div>
+        {upload && (
+          <div className="mt-6 w-full max-w-md space-y-2">
+            <div className="flex justify-between gap-4 text-sm">
+              <span className="truncate">{upload.name}</span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {upload.sent < 1
+                  ? `${formatMb(upload.size * upload.sent)} / ${formatMb(upload.size)} Mo · ${Math.floor(upload.sent * 100)} %`
+                  : "Préparation de la vidéo…"}
+              </span>
+            </div>
+            <Progress value={upload.sent * 100} className="h-2" />
+          </div>
+        )}
       </div>
 
       <div className="relative">

@@ -37,7 +37,10 @@ Le Space se reconstruit en une minute environ.
 - Page d'accueil Gradio minimale : ZeroGPU n'accepte que des apps Gradio
   ayant une fonction `@spaces.GPU` (voir `space_app.py`).
 - API montée sous `/cf` au lieu de la racine.
-- Whisper sur CPU en modèle `small`, sans isolation de la voix (Demucs).
+- Whisper sur CPU en modèle `small` (`base` en mode « Rapide »), sans
+  isolation de la voix (Demucs).
+- Encodage x264 en `veryfast` au lieu de `fast` : rendu plus rapide, fichier
+  un peu plus lourd (`CLIPFLOW_X264_PRESET`).
 - Les fichiers sont effacés à chaque redémarrage du Space.
 - Le Space s'endort sans visite : le premier accès suivant prend une à deux
   minutes.

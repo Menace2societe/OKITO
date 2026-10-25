@@ -65,6 +65,30 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
   return fetch(`${activeBase}${path}`, { ...init, headers: authHeaders(init.headers) })
 }
 
+// POSTs `body` like apiFetch, reporting the upload progress (0–1): fetch()
+// can't, and a video takes minutes to reach the online backend.
+export function apiUpload(
+  path: string,
+  body: FormData,
+  onProgress: (fraction: number) => void,
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `${activeBase}${path}`)
+    authHeaders().forEach((value, name) => xhr.setRequestHeader(name, value))
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded / e.total)
+    }
+    xhr.onload = () =>
+      resolve(new Response(xhr.responseText, {
+        status: xhr.status,
+        headers: { "Content-Type": xhr.getResponseHeader("Content-Type") || "text/plain" },
+      }))
+    xhr.onerror = () => reject(new Error("Connexion au serveur perdue pendant l'envoi."))
+    xhr.send(body)
+  })
+}
+
 // Media URLs come back from the backend as "/api/files/...": make them
 // point at the backend that produced them.
 export function mediaUrl(url: string | null | undefined): string | null {
