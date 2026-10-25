@@ -14,7 +14,10 @@ import os
 # with the lighter model, and skip Demucs (not installed on the Space).
 os.environ.setdefault("WHISPER_DEVICE", "cpu")
 os.environ.setdefault("WHISPER_MODEL_SIZE", "small")
+os.environ.setdefault("WHISPER_FAST_MODEL_SIZE", "base")
 os.environ.setdefault("CLIPFLOW_ROLE", "cloud")
+# Shared CPUs: encode faster, at the cost of slightly larger files.
+os.environ.setdefault("CLIPFLOW_X264_PRESET", "veryfast")
 
 import gradio as gr
 

@@ -2,6 +2,7 @@ import subprocess
 import logging
 import os
 import shutil
+from dataclasses import dataclass
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -20,41 +21,58 @@ VERTICAL_MODES = {
     "9:16_face": (100.0, True),
 }
 
-# Dynamic colour-grade filter chains selected from the frontend.
+# Dynamic looks selected from the frontend, in three parts so that each runs
+# on as few pixels as possible (a 9:16 render otherwise grades 1080×1920
+# pixels per frame, the slowest step on a small server):
+#   grade   per-pixel colour work, applied before the 9:16 overlay;
+#   sharpen the picture only (the blurred background has nothing to sharpen);
+#   finish  frame-wide effects (vignette, grain), on the final frame.
 # A light unsharp pass is added to most looks: social platforms re-encode
 # uploads aggressively, and a touch of sharpening survives that better.
 _SHARPEN = "unsharp=5:5:0.6:5:5:0.0"
 
-VIDEO_FILTERS = {
+
+@dataclass(frozen=True)
+class Look:
+    grade: str
+    finish: Optional[str] = None
+    sharpen: bool = True
+
+    def chain(self) -> str:
+        """The whole look as one filter chain, for a single-picture frame."""
+        return ",".join(p for p in (self.grade, _SHARPEN if self.sharpen else None, self.finish) if p)
+
+
+VIDEO_FILTERS: dict[str, Optional[Look]] = {
     # Teal & orange blockbuster look with a soft vignette.
-    "cinema_intense": (
+    "cinema_intense": Look(
         "eq=contrast=1.20:brightness=-0.02:saturation=1.25,"
-        "colorbalance=rs=0.08:gs=-0.02:bs=-0.08:rm=0.05:bm=-0.05:rh=0.04:bh=-0.06,"
-        f"vignette=PI/5,{_SHARPEN}"
+        "colorbalance=rs=0.08:gs=-0.02:bs=-0.08:rm=0.05:bm=-0.05:rh=0.04:bh=-0.06",
+        finish="vignette=PI/5",
     ),
     # Punchy colours that keep skin tones natural (vibrance > saturation).
-    "vibrant_social": (
-        "eq=contrast=1.10:brightness=0.02:saturation=1.15,"
-        f"vibrance=intensity=0.35,{_SHARPEN}"
+    "vibrant_social": Look(
+        "eq=contrast=1.10:brightness=0.02:saturation=1.15,vibrance=intensity=0.35",
     ),
     # Golden-hour vlog look.
-    "warm_vlog": (
+    "warm_vlog": Look(
         "colortemperature=temperature=4800:mix=0.6,"
-        f"eq=contrast=1.06:brightness=0.03:saturation=1.12,{_SHARPEN}"
+        "eq=contrast=1.06:brightness=0.03:saturation=1.12",
     ),
     # Cold blue/teal night look.
-    "cold_teal": (
+    "cold_teal": Look(
         "colortemperature=temperature=9000:mix=0.5,"
-        "eq=contrast=1.15:brightness=-0.03:saturation=0.95,"
-        f"vignette=PI/6,{_SHARPEN}"
+        "eq=contrast=1.15:brightness=-0.03:saturation=0.95",
+        finish="vignette=PI/6",
     ),
     # Faded film with grain and vignette.
-    "vintage_film": (
-        "curves=preset=vintage,eq=contrast=0.95:saturation=0.85,"
-        "noise=alls=8:allf=t,vignette=PI/4"
+    "vintage_film": Look(
+        "curves=preset=vintage,eq=contrast=0.95:saturation=0.85",
+        finish="noise=alls=8:allf=t,vignette=PI/4",
+        sharpen=False,
     ),
     # High-contrast monochrome with fine grain.
-    "bw_deep": f"hue=s=0,eq=contrast=1.30:brightness=-0.03,noise=alls=5:allf=t,{_SHARPEN}",
+    "bw_deep": Look("hue=s=0,eq=contrast=1.30:brightness=-0.03", finish="noise=alls=5:allf=t"),
     "none": None,
 }
 
@@ -62,6 +80,9 @@ VIDEO_FILTERS = {
 AUDIO_LOUDNORM = "loudnorm=I=-14:TP=-1.5:LRA=11"
 
 DEFAULT_VIDEO_FILTER = "cinema_intense"
+
+# x264 speed/size trade-off: the online Space, short on CPU, uses "veryfast".
+X264_PRESET = os.getenv("CLIPFLOW_X264_PRESET", "fast")
 
 
 def _find_ffmpeg() -> str:
@@ -197,37 +218,43 @@ def _even(value: float) -> int:
 def _build_vertical_filter(
     crop_width: int,
     crop_x: str,
-    color_filter: Optional[str],
+    look: Optional[Look],
     ass_path: Optional[str],
     face_cmd_path: Optional[str] = None,
 ) -> str:
     """Build the -filter_complex string for every 9:16 mode.
 
     Graph:
-      [0:v] ─► fill 1080×1920 ─► boxblur ─────────────────────► [bg]
-      [0:v] ─► (sendcmd) crop crop_width×ih at crop_x ─► 1080 wide ► [fg]
-      [bg][fg] overlay centred ─► (colour grade) ─► (ass) ─► [out]
+      [0:v] ─► fill 270×480 ─► boxblur ─► (grade) ─► 1080×1920 ─────► [bg]
+      [0:v] ─► (sendcmd) crop crop_width×ih at crop_x ─► 1080 wide
+            ─► (grade, sharpen) ─────────────────────────────────────► [fg]
+      [bg][fg] overlay centred ─► (finish) ─► (ass) ─► [out]
 
     A narrow crop fills the frame (classic crop); the full width shows the
     whole picture with blurred bars; anything between is a compromise.
+    The background is blurred at a quarter of the size: a blur hides the
+    difference, and it is several times cheaper.
     """
+    grade = f",{look.grade}" if look else ""
+    sharpen = f",{_SHARPEN}" if look and look.sharpen else ""
+
     fg = "[0:v]"
     crop_name = "crop"
     if face_cmd_path:
         fg += f"sendcmd=f={_ass_path_for_ffmpeg(face_cmd_path)},"
         crop_name = "crop@face"
-    fg += f"{crop_name}={crop_width}:ih:{crop_x}:0,scale=1080:-2[fg]"
+    fg += f"{crop_name}={crop_width}:ih:{crop_x}:0,scale=1080:-2{grade}{sharpen}[fg]"
 
     parts = [
-        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-        "crop=1080:1920,boxblur=20:5[bg]",
+        "[0:v]scale=270:480:force_original_aspect_ratio=increase,"
+        f"crop=270:480,boxblur=5:3{grade},scale=1080:1920[bg]",
         fg,
     ]
 
-    # Post-overlay chain: colour grade, then ASS burn-in.
+    # Post-overlay chain: frame-wide finish, then ASS burn-in.
     post: list[str] = []
-    if color_filter:
-        post.append(color_filter)
+    if look and look.finish:
+        post.append(look.finish)
     if ass_path:
         rel_ass = _ass_path_for_ffmpeg(os.path.abspath(ass_path))
         post.append(f"ass={rel_ass}")
@@ -279,7 +306,7 @@ def process_video(
                 abs_input, start_time, end_time, width, crop_width, face_cmd_path
             ))
 
-    color_filter = VIDEO_FILTERS.get(video_filter, VIDEO_FILTERS[DEFAULT_VIDEO_FILTER])
+    look = VIDEO_FILTERS.get(video_filter, VIDEO_FILTERS[DEFAULT_VIDEO_FILTER])
 
     # Pick encoder settings based on the requested output container.
     ext = os.path.splitext(abs_output)[1].lower()
@@ -297,7 +324,7 @@ def process_video(
         # preserve a 10-bit / 4:2:2 source that many players cannot decode.
         output_options = [
             "-c:v", "libx264",
-            "-preset", "fast",
+            "-preset", X264_PRESET,
             # CRF 20: platforms re-compress uploads, so start from more detail.
             "-crf", "20",
             "-pix_fmt", "yuv420p",
@@ -318,13 +345,13 @@ def process_video(
 
     if ext != ".mp3":
         if vertical:
-            fc = _build_vertical_filter(crop_width, crop_x, color_filter, ass_path, face_cmd_path)
+            fc = _build_vertical_filter(crop_width, crop_x, look, ass_path, face_cmd_path)
             cmd += ["-filter_complex", fc, "-map", "[out]", "-map", "0:a?"]
         else:
             # Square / landscape: simple -vf pipeline (crop / scale)
             vf_parts = [ASPECT_RATIOS.get(aspect_ratio, ASPECT_RATIOS["16:9"])]
-            if color_filter:
-                vf_parts.append(color_filter)
+            if look:
+                vf_parts.append(look.chain())
             if ass_path:
                 rel_ass = _ass_path_for_ffmpeg(os.path.abspath(ass_path))
                 vf_parts.append(f"ass={rel_ass}")
