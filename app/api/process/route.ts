@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { backendHeaders } from "@/lib/backend-proxy"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
@@ -11,10 +12,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const response = await fetch(`${FASTAPI_URL}/api/process`, {
       method: "POST",
-      headers: {
+      headers: backendHeaders({
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
-      },
+      }),
       body: JSON.stringify(body),
       cache: "no-store",
     })

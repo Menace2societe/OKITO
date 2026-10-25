@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { backendHeaders } from "@/lib/backend-proxy"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     try {
       response = await fetch(`${FASTAPI_URL}/api/download-url`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: backendHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ ...body, url: cleanUrl }),
         cache: "no-store",
       })
