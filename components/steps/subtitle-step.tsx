@@ -13,6 +13,7 @@ import { SUBTITLE_STYLES, type SubtitleStyle, type TranscriptWord, type WhisperQ
 import { MAX_WORDS_PER_LINE, lineRanges, linesFromText } from "@/lib/subtitles"
 import { Input } from "@/components/ui/input"
 import type { TranscriptionState } from "@/components/use-transcription"
+import { ONLINE } from "@/lib/backend"
 
 interface SubtitleStepProps {
   fileId: string | null;
@@ -413,7 +414,9 @@ export function SubtitleStep({
           </div>
 
           <Badge variant="secondary" className="mt-4">
-            Transcription locale via Whisper (aucun service cloud)
+            {ONLINE
+              ? "Transcription via Whisper sur le serveur ClipFlow (aucun service tiers)"
+              : "Transcription locale via Whisper (aucun service cloud)"}
           </Badge>
         </div>
       )}

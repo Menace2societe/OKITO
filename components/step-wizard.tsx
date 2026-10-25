@@ -11,6 +11,7 @@ import { TrimStep } from "@/components/steps/trim-step"
 import { SubtitleStep } from "@/components/steps/subtitle-step"
 import { ExportStep } from "@/components/steps/export-step"
 import type { AspectRatio } from "@/components/preview-player"
+import { apiFetch, downloadUrl } from "@/lib/backend"
 import { pollJob } from "@/lib/jobs"
 import { useTranscription, type TranscriptionParams } from "@/components/use-transcription"
 import { linesFromWords } from "@/lib/subtitles"
@@ -259,7 +260,7 @@ export default function StepWizard() {
     }, PROCESS_TIMEOUT_MS)
 
     try {
-      const res = await fetch("/api/process", {
+      const res = await apiFetch("/api/process", {
         method: "POST",
         signal: controller.signal,
         cache: "no-store",
@@ -306,9 +307,9 @@ export default function StepWizard() {
             updateState({
               jobStatus: "completed",
               jobProgress: 100,
-              outputUrl: job.output_url,
-              vttUrl: job.vtt_url || null,
-              srtUrl: job.srt_url || null,
+              outputUrl: downloadUrl(job.output_url),
+              vttUrl: downloadUrl(job.vtt_url),
+              srtUrl: downloadUrl(job.srt_url),
             })
           } else if (job.status === "failed") {
             const errMsg = job.error || "Erreur inconnue lors du traitement"

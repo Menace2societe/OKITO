@@ -1,3 +1,4 @@
+import { AccessGate } from "@/components/access-gate"
 import StepWizard from "@/components/step-wizard"
 
 export default function Page() {
@@ -10,7 +11,9 @@ export default function Page() {
             Éditez et préparez vos vidéos en quelques étapes simples.
           </p>
         </header>
-        <StepWizard />
+        <AccessGate>
+          <StepWizard />
+        </AccessGate>
       </div>
     </main>
   )

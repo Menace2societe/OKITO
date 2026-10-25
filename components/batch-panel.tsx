@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import { downloadUrl } from "@/lib/backend"
 import { pollJob, postJson } from "@/lib/jobs"
 import { CLIP_DURATIONS, SUBTITLE_STYLES, VIDEO_FILTERS } from "@/lib/presets"
 import type { ProjectState } from "@/components/step-wizard"
@@ -185,12 +186,12 @@ export function BatchPanel(props: BatchPanelProps) {
               {clip.status === "completed" && clip.output_url ? (
                 <div className="flex shrink-0 items-center gap-3">
                   {clip.srt_url && (
-                    <a href={clip.srt_url} download className="text-xs text-primary underline underline-offset-4">
+                    <a href={downloadUrl(clip.srt_url) ?? undefined} download className="text-xs text-primary underline underline-offset-4">
                       .srt
                     </a>
                   )}
                   <Button asChild size="sm" variant="outline">
-                    <a href={clip.output_url} download={`clipflow_${idx + 1}.${props.outputFormat}`}>
+                    <a href={downloadUrl(clip.output_url) ?? undefined} download={`clipflow_${idx + 1}.${props.outputFormat}`}>
                       <Download className="mr-2 h-4 w-4" />
                       Télécharger
                     </a>

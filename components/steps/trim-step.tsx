@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PreviewPlayer, type AspectRatio, type PreviewPlayerHandle, type VideoFilter } from "@/components/preview-player"
 import { cn } from "@/lib/utils"
 import { CLIP_DURATIONS, VIDEO_FILTERS, type Moment, type WhisperQuality } from "@/lib/presets"
+import { apiFetch } from "@/lib/backend"
 import { pollJob, postJson } from "@/lib/jobs"
 
 interface TrimStepProps {
@@ -113,7 +114,7 @@ export function TrimStep({
     setRandomLoading(true)
     setRandomInfo(null)
     try {
-      const res = await fetch("/api/random-clip", {
+      const res = await apiFetch("/api/random-clip", {
         method: "POST",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
