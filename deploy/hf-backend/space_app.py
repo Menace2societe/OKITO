@@ -14,6 +14,7 @@ import os
 # with the lighter model, and skip Demucs (not installed on the Space).
 os.environ.setdefault("WHISPER_DEVICE", "cpu")
 os.environ.setdefault("WHISPER_MODEL_SIZE", "small")
+os.environ.setdefault("CLIPFLOW_ROLE", "cloud")
 
 import gradio as gr
 

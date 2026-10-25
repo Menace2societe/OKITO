@@ -41,6 +41,13 @@ réseaux sociaux — le tout sans service cloud.
 | `CLIPFLOW_LLM` | `on` | `off` pour forcer le score local |
 | `CLIPFLOW_LLM_MODEL` | `claude-opus-5-5` | Modèle utilisé pour les meilleurs moments |
 | `MEDIA_RETENTION_DAYS` | `7` | Durée de conservation des fichiers média |
+| `CLIPFLOW_ACCESS_CODE` | — | Mode en ligne : code exigé dans l'en-tête `X-ClipFlow-Key` (sauf `/api/health`, `/api/files/…`, `/media/…`) |
+| `CLIPFLOW_CORS_ORIGINS` | `http://localhost:3000` | Domaines autorisés à appeler l'API depuis un navigateur, séparés par des virgules |
+| `CLIPFLOW_ROLE` | `pc` | `pc` ou `cloud`, renvoyé par `/api/health` |
+
+Sans ces trois variables, ClipFlow fonctionne en local exactement comme avant.
+Le backend en ligne (Space Hugging Face) est décrit dans
+`deploy/hf-backend/GUIDE.md`.
 
 ## Pile technique
 
