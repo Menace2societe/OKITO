@@ -52,3 +52,6 @@ backend/cookies.txt
 
 # Runtime logs (start-clipflow.ps1)
 logs/
+
+# Hugging Face Space build output (deploy/hf-backend/build_space.py)
+deploy/hf-backend/dist/
