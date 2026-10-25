@@ -39,11 +39,33 @@ if (Test-Path $EnvFile) {
 }
 $Online = [bool]$env:CLIPFLOW_ACCESS_CODE
 
+# Runs a command whose failure is expected and harmless (killing a process
+# that already exited, turning off a serve/funnel that isn't on). In Windows
+# PowerShell, a native command writing to stderr is a terminating error under
+# $ErrorActionPreference = "Stop", even with 2>$null.
+function Invoke-Quietly([scriptblock]$Command) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { & $Command 2>$null | Out-Null } catch { }
+    finally { $ErrorActionPreference = $previous }
+}
+
+# Turns off what tailscale serves on $Port, if anything. Only when it is on:
+# `tailscale funnel ... off` blocks forever, waiting for the user to enable
+# Funnel, on a tailnet where Funnel was never enabled.
+function Disable-TailscalePort([int]$Port) {
+    $config = & $Tailscale serve status --json | ConvertFrom-Json
+    if ($config.TCP -and ($config.TCP.PSObject.Properties.Name -contains "$Port")) {
+        Invoke-Quietly { & $Tailscale serve "--https=$Port" off }
+    }
+}
+
 function Stop-ClipFlow {
     if (Test-Path $PidFile) {
         foreach ($procId in Get-Content $PidFile) {
-            # /T kills the whole tree (npm -> node, python -> ffmpeg).
-            & taskkill.exe /PID $procId /T /F 2>$null | Out-Null
+            # /T kills the whole tree (npm -> node, python -> ffmpeg). The PID
+            # may be gone already (crash, reboot).
+            Invoke-Quietly { taskkill.exe /PID $procId /T /F }
         }
         Remove-Item $PidFile
     }
@@ -52,8 +74,8 @@ function Stop-ClipFlow {
 
 if ($Stop) {
     Stop-ClipFlow
-    & $Tailscale serve --https=443 off 2>$null | Out-Null
-    & $Tailscale funnel "--https=$FunnelPort" off 2>$null | Out-Null
+    Disable-TailscalePort 443
+    Disable-TailscalePort $FunnelPort
     exit 0
 }
 
@@ -98,10 +120,12 @@ $dns = ((& $Tailscale status --json | ConvertFrom-Json).Self.DNSName).TrimEnd(".
 
 # Public backend for the online site, only behind an access code.
 if ($Online) {
+    Write-Host "Publication du backend avec Tailscale Funnel..."
+    Write-Host "(si un lien login.tailscale.com s'affiche, ouvre-le et autorise Funnel : le script reprend tout seul)"
     & $Tailscale funnel --bg "--https=$FunnelPort" http://127.0.0.1:8000
     if ($LASTEXITCODE -ne 0) { throw "tailscale funnel a échoué — Funnel est-il activé pour ce PC ?" }
 } else {
-    & $Tailscale funnel "--https=$FunnelPort" off 2>$null | Out-Null
+    Disable-TailscalePort $FunnelPort
 }
 
 Write-Host ""
