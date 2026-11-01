@@ -17,11 +17,11 @@ const DualRangeSlider = React.forwardRef<
     )}
     {...props}
   >
-    <SliderPrimitives.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
-      <SliderPrimitives.Range className="absolute h-full bg-primary" />
+    <SliderPrimitives.Track className="relative h-14 w-full grow border border-filet bg-papier">
+      <SliderPrimitives.Range className="absolute -top-px -bottom-px border-2 border-tampon bg-tampon/10" />
     </SliderPrimitives.Track>
-    <SliderPrimitives.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
-    <SliderPrimitives.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
+    <SliderPrimitives.Thumb aria-label="Début de la sélection" className="relative block h-14 w-12 cursor-ew-resize before:absolute before:inset-y-2 before:left-1/2 before:w-1.5 before:-translate-x-1/2 before:bg-tampon focus-visible:outline-none focus-visible:before:inset-y-0 focus-visible:before:w-2.5 disabled:pointer-events-none disabled:opacity-50" />
+    <SliderPrimitives.Thumb aria-label="Fin de la sélection" className="relative block h-14 w-12 cursor-ew-resize before:absolute before:inset-y-2 before:left-1/2 before:w-1.5 before:-translate-x-1/2 before:bg-tampon focus-visible:outline-none focus-visible:before:inset-y-0 focus-visible:before:w-2.5 disabled:pointer-events-none disabled:opacity-50" />
   </SliderPrimitives.Root>
 ))
 DualRangeSlider.displayName = SliderPrimitives.Root.displayName

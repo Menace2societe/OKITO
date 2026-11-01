@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>ClipFlow · Jaquette de cassette</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bic:#1F3FA8;--rouge:#C8232C;--encre:#1B1E24;--gris:#6B7280;--ligne:#C9D3EA;--fond:#F1F3F7}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:900px;overflow:hidden}
+body{font-family:Barlow,system-ui,sans-serif;font-size:16px;color:var(--encre);background:var(--fond);display:grid;grid-template-columns:96px 1fr}
+.tranche{background:#fff;border-right:1px solid var(--ligne);display:flex;flex-direction:column;align-items:center;position:relative}
+.tranche .bande{position:absolute;top:0;left:0;right:0;height:14px;background:var(--rouge)}
+.tranche .titre{writing-mode:vertical-rl;transform:rotate(180deg);font-family:Kalam,cursive;font-size:26px;color:var(--bic);margin-top:60px}
+.tranche .marque{margin-top:auto;margin-bottom:24px;font-family:'Barlow Condensed';font-weight:700;font-size:18px}
+.page{display:flex;flex-direction:column;height:900px}
+header{height:84px;display:flex;align-items:center;gap:8px;padding:0 40px;background:#fff;border-bottom:1px solid var(--ligne)}
+header a{font-size:18px;padding:12px 18px;color:var(--gris);text-decoration:none}
+header a.ici{color:var(--bic);font-weight:700;border-bottom:3px solid var(--bic)}
+.pc{margin-left:auto;font-size:15px;color:var(--gris)}.pc b{color:#1F7A44}
+main{flex:1;display:grid;grid-template-columns:400px 1fr;gap:40px;padding:32px 40px}
+.apercu{background:#1E242B;height:640px;position:relative;display:flex;align-items:flex-end;justify-content:center;padding-bottom:80px}
+.apercu span{background:#000;color:#fff;font-weight:700;font-size:22px;padding:4px 10px}
+.apercu em{position:absolute;top:12px;left:12px;font-style:normal;font-size:13px;color:#cbd5e1}
+.droite{display:flex;flex-direction:column;gap:22px}
+.compteur{display:flex;align-items:center;gap:18px}
+.compteur .chiffres{font-family:'Barlow Condensed';font-weight:700;font-size:44px;letter-spacing:.04em;background:#fff;border:1px solid var(--ligne);padding:2px 14px;font-variant-numeric:tabular-nums}
+.compteur p{color:var(--gris);font-size:16px}
+.bandeau{height:52px;background:#fff;border:1px solid var(--ligne);position:relative}
+.bandeau div{position:absolute;left:27%;width:16%;top:0;bottom:0;background:rgba(31,63,168,.14);border-left:3px solid var(--bic);border-right:3px solid var(--bic)}
+.outils{display:flex;gap:10px;flex-wrap:wrap}
+.outils span{height:48px;padding:0 18px;border:1px solid #A8B3C9;background:#fff;display:flex;align-items:center;font-weight:500}
+.outils span.on{border:2px solid var(--bic);color:var(--bic);font-weight:700}
+.liste{background:#fff;border:1px solid var(--ligne);padding:18px 24px;background-image:repeating-linear-gradient(#fff 0 47px,var(--ligne) 47px 48px)}
+.liste h2{font-family:'Barlow Condensed';font-size:22px;color:var(--rouge);height:48px;line-height:48px}
+.titre-l{display:grid;grid-template-columns:28px 1fr 130px 70px;height:48px;align-items:center;font-variant-numeric:tabular-nums}
+.titre-l .t{font-family:Kalam,cursive;font-size:20px;color:var(--bic)}
+.titre-l .d{text-align:right;font-weight:600}.titre-l .h{color:var(--gris)}
+.titre-l.on .t{text-decoration:underline;text-decoration-color:var(--rouge);text-decoration-thickness:2px}
+.note{font-size:15px;color:var(--gris)}
+footer{height:84px;display:flex;align-items:center;justify-content:space-between;padding:0 40px;background:#fff;border-top:1px solid var(--ligne)}
+footer .go{background:var(--bic);color:#fff;font-weight:700;font-size:18px;height:56px;padding:0 28px;display:flex;align-items:center}
+</style></head><body>
+<aside class="tranche"><div class="bande"></div><div class="titre">commerce-kinshasa-ep3 · 12:47</div><div class="marque">ClipFlow</div></aside>
+<div class="page">
+<header><a>1. Import</a><a class="ici">2. Découpe</a><a>3. Sous-titres</a><a>4. Export</a><span class="pc">PC relais : <b>allumé</b></span></header>
+<main>
+  <div class="apercu"><em>exemple</em><span>Vos clients paient plus vite</span></div>
+  <div class="droite">
+    <div class="compteur"><span class="chiffres">03:29 → 03:46</span><p>17 s sur la bande · format 9:16, visage suivi</p></div>
+    <div class="bandeau"><div></div></div>
+    <div class="outils"><span class="on">Meilleurs moments</span><span>Clip au hasard</span><span>15–30 s</span><span>30–60 s</span><span>60–90 s</span><span>Look au hasard</span></div>
+    <div class="liste">
+      <h2>Face A · moments repérés</h2>
+      <div class="titre-l on"><span>1</span><span class="t">Vos clients paient plus vite…</span><span class="h">03:29–03:46</span><span class="d">0:17</span></div>
+      <div class="titre-l"><span>2</span><span class="t">Bonjour et bienvenue à Kinshasa…</span><span class="h">00:00–00:25</span><span class="d">0:25</span></div>
+      <div class="titre-l"><span>3</span><span class="t">Le premier conseil, c'est de noter…</span><span class="h">05:12–05:38</span><span class="d">0:26</span></div>
+    </div>
+    <p class="note">Classés par le score local. Données d'exemple.</p>
+  </div>
+</main>
+<footer><span>← Retour</span><span class="go">Suivant : sous-titres</span></footer>
+</div>
+</body></html>

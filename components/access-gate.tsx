@@ -1,9 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { KeyRound, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { ONLINE, checkHealth, getAccessCode, hasBackend, setAccessCode, type BackendRole } from "@/lib/backend"
 
@@ -52,7 +51,7 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
     if (!health) {
       setError("Le serveur ne répond pas. Réessaie dans une minute.")
     } else if (!health.authorized) {
-      setError("Code incorrect.")
+      setError("Code incorrect. Vérifie-le et réessaie, ou redemande-le à Jonathan.")
     } else {
       setAccessCode(code.trim())
       setState("open")
@@ -62,43 +61,65 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
   if (state === "open") return <>{children}</>
 
   return (
-    <Card className="mx-auto w-full max-w-md p-6 sm:p-8">
-      {state === "checking" || state === "asleep" ? (
-        <div className="flex flex-col items-center gap-3 py-6 text-center">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="font-medium">
-            {state === "checking" ? "Connexion au serveur…" : "Réveil du serveur…"}
-          </p>
-          {state === "asleep" && (
-            <p className="text-sm text-muted-foreground">
-              Après une pause, le serveur met une à deux minutes à redémarrer.
-            </p>
+    <div className="flex min-h-screen flex-col">
+      <header className="bg-toile text-white">
+        <div className="mx-auto flex max-w-[1440px] items-center px-4 py-4 sm:px-10 lg:min-h-24">
+          <p className="text-2xl font-extrabold tracking-[-0.01em] [font-stretch:112%]">ClipFlow</p>
+        </div>
+      </header>
+
+      <main className="flex flex-1 items-start justify-center px-4 py-12 sm:items-center sm:py-16">
+        <div className="w-full max-w-md border border-filet bg-papier p-6 sm:p-8">
+          {state === "checking" || state === "asleep" ? (
+            <div aria-live="polite" className="flex flex-col items-start gap-3">
+              <h1 className="flex items-center gap-3 text-[34px] font-extrabold leading-tight tracking-[-0.01em] [font-stretch:92%]">
+                <Loader2 aria-hidden className="h-7 w-7 shrink-0 animate-spin text-toile" />
+                {state === "checking" ? "Connexion au serveur…" : "Réveil du serveur…"}
+              </h1>
+              {state === "asleep" && (
+                <p className="text-[15px] text-gris">
+                  Après une pause, le serveur met une à deux minutes à redémarrer. Cette page réessaie toute seule :
+                  garde-la ouverte.
+                </p>
+              )}
+            </div>
+          ) : (
+            <form onSubmit={submit} className="space-y-5">
+              <h1 className="text-[34px] font-extrabold leading-tight tracking-[-0.01em] [font-stretch:92%]">
+                Code d&apos;accès
+              </h1>
+              <p className="text-base text-encre">
+                {getAccessCode() ? "Le code enregistré n'est plus valable. Entre le nouveau code." : "Entre le code pour utiliser ClipFlow."}
+              </p>
+              <div className="space-y-2">
+                <Input
+                  type="password"
+                  autoComplete="current-password"
+                  aria-label="Code d'accès"
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? "code-erreur" : undefined}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="Code d'accès"
+                  autoFocus
+                />
+                {error && (
+                  <p id="code-erreur" role="alert" className="text-[15px] text-erreur">
+                    {error}
+                  </p>
+                )}
+              </div>
+              <Button type="submit" className="w-full" disabled={submitting || !code.trim()}>
+                {submitting && <Loader2 aria-hidden className="h-4 w-4 animate-spin" />}
+                Entrer
+              </Button>
+              <p className="border-t border-filet pt-4 text-[15px] text-gris">
+                Le code se demande à Jonathan sur WhatsApp.
+              </p>
+            </form>
           )}
         </div>
-      ) : (
-        <form onSubmit={submit} className="space-y-4">
-          <div className="flex items-center gap-2">
-            <KeyRound className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">Code d&apos;accès</h2>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {getAccessCode() ? "Le code enregistré n'est plus valable." : "Entre le code pour utiliser ClipFlow."}
-          </p>
-          <Input
-            type="password"
-            autoComplete="current-password"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Code d'accès"
-            autoFocus
-          />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={submitting || !code.trim()}>
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Entrer
-          </Button>
-        </form>
-      )}
-    </Card>
+      </main>
+    </div>
   )
 }

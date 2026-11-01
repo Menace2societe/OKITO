@@ -57,3 +57,83 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Studio print world. Everything inside .univers-tirage takes the new
+   palette; shadcn variables are remapped so screens not yet redone stay
+   readable inside it. */
+@layer base {
+  .univers-tirage {
+    --toile: 207 48% 35%;        /* #2F5D86 painted backdrop */
+    --toile-fonce: 207 49% 28%;  /* #24496A hover / pressed */
+    --papier: 60 23% 98%;        /* #FBFBF8 photo paper */
+    --fond: 210 17% 92%;         /* #E7EBEF studio wall */
+    --encre: 216 13% 13%;        /* #1C1F24 */
+    --gris: 213 9% 33%;          /* #4C545E secondary text, 7.4:1 on paper */
+    --filet: 213 13% 85%;        /* #D5DAE0 1px rules */
+    --filet-fort: 211 10% 60%;   /* #8F98A2 control borders */
+    --tampon: 272 52% 35%;       /* #5B2A86 stamp ink */
+    --erreur: 4 68% 40%;         /* #AB2B21 */
+    --ok: 145 55% 30%;           /* #237744 */
+
+    --background: var(--fond);
+    --foreground: var(--encre);
+    --card: var(--papier);
+    --card-foreground: var(--encre);
+    --popover: var(--papier);
+    --popover-foreground: var(--encre);
+    --primary: var(--toile);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--fond);
+    --secondary-foreground: var(--encre);
+    --muted: var(--fond);
+    --muted-foreground: var(--gris);
+    --accent: 210 20% 95%;
+    --accent-foreground: var(--encre);
+    --destructive: var(--erreur);
+    --destructive-foreground: 0 0% 100%;
+    --border: var(--filet);
+    --input: var(--filet-fort);
+    --ring: var(--tampon);
+    --radius: 0px;
+
+    background: hsl(var(--fond));
+    color: hsl(var(--encre));
+    font-size: 16px;
+    caret-color: hsl(var(--tampon));
+    accent-color: hsl(var(--toile));
+    scrollbar-color: hsl(var(--filet-fort)) hsl(var(--fond));
+  }
+
+  .univers-tirage ::selection {
+    background: hsl(var(--tampon));
+    color: #fff;
+  }
+
+  .univers-tirage :focus-visible {
+    outline: 2px solid hsl(var(--tampon));
+    outline-offset: 2px;
+  }
+
+  .univers-tirage a {
+    text-underline-offset: 4px;
+  }
+
+  .univers-tirage .chiffres {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* The stamp lands: a short press, then rest. */
+@keyframes tampon-pose {
+  0% { transform: rotate(-4deg) scale(1.18); opacity: 0; }
+  55% { transform: rotate(-4deg) scale(0.97); opacity: 1; }
+  100% { transform: rotate(-4deg) scale(1); opacity: 0.94; }
+}
+
+.tampon-pose {
+  animation: tampon-pose 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tampon-pose { animation: none; }
+}

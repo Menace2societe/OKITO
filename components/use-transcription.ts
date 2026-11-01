@@ -83,14 +83,14 @@ export function useTranscription(
             setState({ status: "idle", error: null, startedAt: null })
             onResultRef.current(job.result, params)
           } else if (job.status === "failed") {
-            fail(job.error || "Erreur lors de la génération des sous-titres.")
+            fail(job.error || "La transcription s'est arrêtée sans donner de raison. Relance-la ; si ça recommence, choisis la qualité Rapide.")
           }
         },
         (job) => job.status === "completed" || job.status === "failed",
         fail
       )
     } catch (e) {
-      fail(e instanceof Error ? e.message : "Erreur inconnue")
+      fail(e instanceof Error ? e.message : "La transcription n'a pas pu démarrer. Vérifie la connexion, puis relance.")
     }
   }, [])
 

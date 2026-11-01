@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-01T00:00:00Z",
+  "title": "Design System: ClipFlow",
+  "extensions": {
+    "colorMeta": {
+      "toile": { "role": "primary", "displayName": "Bleu toile de fond", "canonical": "hsl(207 48% 35%)", "cssVar": "--toile", "sourceHex": "#2F5D86", "tonalRamp": ["hsl(207 40% 15%)", "hsl(207 46% 22%)", "hsl(207 48% 35%)", "hsl(207 42% 45%)", "hsl(207 38% 55%)", "hsl(207 34% 67%)", "hsl(207 30% 80%)", "hsl(207 24% 95%)"] },
+      "toile-fonce": { "role": "primary", "displayName": "Bleu toile foncé", "canonical": "hsl(207 49% 28%)", "cssVar": "--toile-fonce", "sourceHex": "#24496A", "tonalRamp": ["hsl(207 40% 15%)", "hsl(207 49% 22%)", "hsl(207 49% 28%)", "hsl(207 42% 40%)", "hsl(207 38% 52%)", "hsl(207 34% 65%)", "hsl(207 30% 80%)", "hsl(207 24% 95%)"] },
+      "tampon": { "role": "secondary", "displayName": "Violet de tampon", "canonical": "hsl(272 52% 35%)", "cssVar": "--tampon", "sourceHex": "#5B2A86", "tonalRamp": ["hsl(272 44% 15%)", "hsl(272 50% 25%)", "hsl(272 52% 35%)", "hsl(272 44% 45%)", "hsl(272 38% 57%)", "hsl(272 34% 70%)", "hsl(272 30% 83%)", "hsl(272 26% 95%)"] },
+      "papier": { "role": "neutral", "displayName": "Papier photo", "canonical": "hsl(60 23% 98%)", "cssVar": "--papier", "sourceHex": "#FBFBF8", "tonalRamp": ["hsl(60 6% 15%)", "hsl(60 6% 25%)", "hsl(60 6% 35%)", "hsl(60 8% 50%)", "hsl(60 10% 65%)", "hsl(60 14% 80%)", "hsl(60 18% 92%)", "hsl(60 23% 98%)"] },
+      "fond": { "role": "neutral", "displayName": "Mur du studio", "canonical": "hsl(210 17% 92%)", "cssVar": "--fond", "sourceHex": "#E7EBEF", "tonalRamp": ["hsl(210 10% 15%)", "hsl(210 10% 25%)", "hsl(210 11% 35%)", "hsl(210 12% 50%)", "hsl(210 14% 65%)", "hsl(210 16% 80%)", "hsl(210 17% 92%)", "hsl(210 20% 97%)"] },
+      "encre": { "role": "neutral", "displayName": "Encre", "canonical": "hsl(216 13% 13%)", "cssVar": "--encre", "sourceHex": "#1C1F24", "tonalRamp": ["hsl(216 13% 13%)", "hsl(216 11% 22%)", "hsl(216 10% 32%)", "hsl(216 9% 45%)", "hsl(216 9% 58%)", "hsl(216 10% 72%)", "hsl(216 12% 85%)", "hsl(216 14% 95%)"] },
+      "gris": { "role": "neutral", "displayName": "Gris légende", "canonical": "hsl(213 9% 33%)", "cssVar": "--gris", "sourceHex": "#4C545E", "tonalRamp": ["hsl(213 9% 15%)", "hsl(213 9% 24%)", "hsl(213 9% 33%)", "hsl(213 8% 45%)", "hsl(213 9% 58%)", "hsl(213 10% 72%)", "hsl(213 12% 85%)", "hsl(213 14% 95%)"] },
+      "filet": { "role": "neutral", "displayName": "Filet", "canonical": "hsl(213 13% 85%)", "cssVar": "--filet", "sourceHex": "#D5DAE0", "tonalRamp": ["hsl(213 9% 15%)", "hsl(213 9% 28%)", "hsl(213 9% 42%)", "hsl(213 10% 55%)", "hsl(213 11% 68%)", "hsl(213 13% 78%)", "hsl(213 13% 85%)", "hsl(213 16% 95%)"] },
+      "filet-fort": { "role": "neutral", "displayName": "Filet fort", "canonical": "hsl(211 10% 60%)", "cssVar": "--filet-fort", "sourceHex": "#8F98A2", "tonalRamp": ["hsl(211 9% 15%)", "hsl(211 9% 27%)", "hsl(211 9% 40%)", "hsl(211 10% 50%)", "hsl(211 10% 60%)", "hsl(211 12% 72%)", "hsl(211 14% 85%)", "hsl(211 16% 95%)"] },
+      "survol": { "role": "neutral", "displayName": "Papier au survol", "canonical": "hsl(210 20% 95%)", "cssVar": "--accent", "tonalRamp": ["hsl(210 10% 15%)", "hsl(210 10% 28%)", "hsl(210 11% 42%)", "hsl(210 12% 56%)", "hsl(210 14% 70%)", "hsl(210 16% 82%)", "hsl(210 20% 95%)", "hsl(210 22% 98%)"] },
+      "erreur": { "role": "error", "displayName": "Rouge erreur", "canonical": "hsl(4 68% 40%)", "cssVar": "--erreur", "sourceHex": "#AB2B21", "tonalRamp": ["hsl(4 60% 15%)", "hsl(4 66% 27%)", "hsl(4 68% 40%)", "hsl(4 58% 50%)", "hsl(4 52% 62%)", "hsl(4 48% 74%)", "hsl(4 44% 86%)", "hsl(4 40% 95%)"] },
+      "ok": { "role": "success", "displayName": "Vert fait", "canonical": "hsl(145 55% 30%)", "cssVar": "--ok", "sourceHex": "#237744", "tonalRamp": ["hsl(145 48% 12%)", "hsl(145 52% 20%)", "hsl(145 55% 30%)", "hsl(145 44% 42%)", "hsl(145 38% 55%)", "hsl(145 34% 68%)", "hsl(145 30% 82%)", "hsl(145 28% 94%)"] },
+      "blanc": { "role": "neutral", "displayName": "Blanc", "canonical": "#ffffff", "tonalRamp": ["#262626", "#404040", "#595959", "#737373", "#8c8c8c", "#b3b3b3", "#d9d9d9", "#ffffff"] }
+    },
+    "typographyMeta": {
+      "marque": { "displayName": "Marque", "purpose": "Le nom ClipFlow dans la barre bleue. Archivo élargie (font-stretch 112 %)." },
+      "etapes": { "displayName": "Étapes", "purpose": "Les quatre étapes en grands mots dans la barre ; courante en 800 soulignée de 3 px blanc, autres en 500 à 85 % ou 65 % de blanc. font-stretch 88 %." },
+      "headline": { "displayName": "Titre d'écran", "purpose": "Le titre unique de chaque écran. font-stretch 92 %." },
+      "title": { "displayName": "Titre de section", "purpose": "Titres de section et invite de la zone de dépôt. font-stretch 92 %." },
+      "body": { "displayName": "Texte", "purpose": "Taille de base de l'univers (16 px) : libellés, valeurs, champs." },
+      "body-strong": { "displayName": "Texte appuyé", "purpose": "Boutons, libellés de réglages, option choisie." },
+      "secondaire": { "displayName": "Secondaire", "purpose": "Légendes, aides, en-têtes de colonnes, erreurs. Plancher de 15 px." },
+      "tampon-temps": { "displayName": "Tampon, temps", "purpose": "Ligne « début → fin » du tampon, chiffres tabulaires, font-stretch 90 %." },
+      "tampon-duree": { "displayName": "Tampon, durée", "purpose": "Ligne durée et format du tampon." },
+      "bouton-grand": { "displayName": "Bouton grand", "purpose": "Bouton principal du pied fixe et de l'export." }
+    },
+    "shadows": [
+      { "name": "tirage", "value": "0 1px 0 hsl(var(--filet-fort)), 0 12px 28px -16px rgba(28,31,36,0.45)", "purpose": "Seule ombre du système : le bord de papier photo autour de l'aperçu." }
+    ],
+    "motion": [
+      { "name": "tampon-pose", "value": "320ms cubic-bezier(0.16, 1, 0.3, 1) both; rotate(-4deg) scale(1.18) opacity 0 → scale(0.97) opacity 1 à 55 % → scale(1) opacity 0.94", "purpose": "Le tampon se pose quand on choisit un moment, tire un clip aléatoire ou qu'un rendu se termine. Supprimé sous prefers-reduced-motion." },
+      { "name": "avancement", "value": "width 500ms cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Remplissage violet des barres d'avancement." },
+      { "name": "etat", "value": "color, background-color, border-color 150ms cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Survol des boutons, options et lignes de liste." },
+      { "name": "attente-indeterminee", "value": "Tailwind animate-pulse (2s cubic-bezier(0.4, 0, 0.6, 1) infinite)", "purpose": "Barre pleine de la transcription, durée inconnue." },
+      { "name": "chargement", "value": "Tailwind animate-spin (1s linear infinite)", "purpose": "Icône de chargement dans un bouton ou un statut." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px", "purpose": "Gouttières de 40 px, bord du tirage de 20 px, libellés de retour complets." },
+      { "name": "md", "value": "768px", "purpose": "Listes en colonnes fixes avec en-têtes." },
+      { "name": "lg", "value": "1024px", "purpose": "Grille tirage + colonne de travail, barre de 96 px avec les quatre étapes, pied de 88 px." }
+    ],
+    "focus": { "value": "outline 2px solid hsl(var(--tampon)); outline-offset 2px (composants : ring 2px tampon, offset 2px)", "purpose": "Focus clavier visible partout dans l'univers." },
+    "exceptions": [
+      { "name": "rendu-sous-titres", "purpose": "Les aperçus des styles de sous-titres gardent les vraies couleurs du rendu vidéo (blanc, jaune #FDE047, vert #4ADE80, contours et ombres noires, capitales du style Impact), sur un bandeau d'encre. Ils ne sortent jamais de l'aperçu." },
+      { "name": "fond-flou-vertical", "purpose": "Le fond flou derrière une vidéo verticale imite le rendu FFmpeg ; ce n'est pas un effet d'interface." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Bouton principal",
+      "kind": "button",
+      "refersTo": "button-primary-lg",
+      "description": "Le seul bouton plein de l'écran : « Suivant : … », lancer, télécharger ou relancer le rendu, entrer.",
+      "html": "<button class=\"ds-btn-primary\">Suivant : sous-titrer <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 56px; padding: 0 28px; background: hsl(207 48% 35%); color: #fff; font-family: Archivo, system-ui, sans-serif; font-size: 18px; font-weight: 600; border: none; border-radius: 0; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-primary:hover { background: hsl(207 48% 35% / 0.9); } .ds-btn-primary:focus-visible { outline: 2px solid hsl(272 52% 35%); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.5; pointer-events: none; }"
+    },
+    {
+      "name": "Bouton à contour",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Toutes les actions secondaires : meilleurs moments, clip aléatoire, choisir un fichier, lancer une série.",
+      "html": "<button class=\"ds-btn-outline\">Meilleurs moments</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 20px; background: hsl(60 23% 98%); color: hsl(216 13% 13%); font-family: Archivo, system-ui, sans-serif; font-size: 16px; font-weight: 600; border: 1px solid hsl(211 10% 60%); border-radius: 0; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-outline:hover { background: hsl(210 20% 95%); } .ds-btn-outline:focus-visible { outline: 2px solid hsl(272 52% 35%); outline-offset: 2px; } .ds-btn-outline:disabled { opacity: 0.5; pointer-events: none; }"
+    },
+    {
+      "name": "Lien d'action",
+      "kind": "button",
+      "description": "Retour, nouvelle vidéo, fichiers .srt / .vtt : texte souligné, cible de 48 px.",
+      "html": "<button class=\"ds-link\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/></svg>Retour à l'import</button>",
+      "css": ".ds-link { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0; background: none; border: none; color: hsl(216 13% 13%); font-family: Archivo, system-ui, sans-serif; font-size: 16px; text-decoration: underline; text-decoration-color: hsl(211 10% 60%); text-underline-offset: 4px; cursor: pointer; } .ds-link:hover { text-decoration-color: hsl(216 13% 13%); } .ds-link:focus-visible { outline: 2px solid hsl(272 52% 35%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Options collées",
+      "kind": "chip",
+      "refersTo": "option-choisie",
+      "description": "Choix exclusif dans un cadre unique (durée, qualité, nombre de clips) ; l'option choisie en aplat d'encre.",
+      "html": "<div class=\"ds-options\" role=\"group\" aria-label=\"Durée du clip\"><button aria-pressed=\"true\">15–30 s</button><button aria-pressed=\"false\">30–60 s</button><button aria-pressed=\"false\">60–90 s</button></div>",
+      "css": ".ds-options { display: inline-flex; border: 1px solid hsl(211 10% 60%); } .ds-options button { height: 48px; padding: 0 16px; border: none; border-right: 1px solid hsl(213 13% 85%); background: hsl(60 23% 98%); color: hsl(216 13% 13%); font-family: Archivo, system-ui, sans-serif; font-size: 16px; font-variant-numeric: tabular-nums; border-radius: 0; cursor: pointer; } .ds-options button:last-child { border-right: none; } .ds-options button:hover { background: hsl(210 20% 95%); } .ds-options button[aria-pressed=\"true\"] { background: hsl(216 13% 13%); color: #fff; font-weight: 600; } .ds-options button:focus-visible { outline: 2px solid hsl(272 52% 35%); outline-offset: 2px; }"
+    },
+    {
+      "name": "Champ",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Champ de saisie : lien, code d'accès, mots à reconnaître.",
+      "html": "<input class=\"ds-input\" type=\"url\" placeholder=\"https://youtube.com/…\" aria-label=\"Lien de la vidéo\">",
+      "css": ".ds-input { height: 48px; width: 100%; padding: 8px 16px; background: hsl(60 23% 98%); color: hsl(216 13% 13%); border: 1px solid hsl(211 10% 60%); border-radius: 0; font-family: Archivo, system-ui, sans-serif; font-size: 16px; caret-color: hsl(272 52% 35%); } .ds-input::placeholder { color: hsl(213 9% 33%); } .ds-input:focus-visible { outline: 2px solid hsl(272 52% 35%); outline-offset: 2px; } .ds-input:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Barre studio",
+      "kind": "nav",
+      "refersTo": "barre-studio",
+      "description": "En-tête bleu toile : marque, quatre étapes en grands mots (courante soulignée), fichier en cours.",
+      "html": "<header class=\"ds-barre\"><p class=\"ds-marque\">ClipFlow</p><ol class=\"ds-etapes\"><li class=\"passee\">Importer</li><li aria-current=\"step\">Découper</li><li>Sous-titrer</li><li>Exporter</li></ol><span class=\"ds-fichier\">exemple.mp4 · 00:38</span></header>",
+      "css": ".ds-barre { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 48px; min-height: 96px; padding: 16px 40px; background: hsl(207 48% 35%); color: #fff; font-family: Archivo, system-ui, sans-serif; } .ds-marque { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em; font-stretch: 112%; } .ds-etapes { display: flex; align-items: baseline; gap: 36px; margin: 0; padding: 0; list-style: none; } .ds-etapes li { font-size: 30px; line-height: 1.25; font-stretch: 88%; font-weight: 500; color: rgba(255,255,255,0.65); } .ds-etapes li.passee { color: rgba(255,255,255,0.85); } .ds-etapes li[aria-current=\"step\"] { font-weight: 800; color: #fff; border-bottom: 3px solid #fff; padding-bottom: 4px; } .ds-fichier { margin-left: auto; font-size: 15px; color: rgba(255,255,255,0.85); font-variant-numeric: tabular-nums; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 20px; }"
+    },
+    {
+      "name": "Tirage et tampon",
+      "kind": "custom",
+      "refersTo": "tirage",
+      "description": "Signature : l'aperçu dans un bord de papier photo, seule ombre du système, avec le tampon violet des temps.",
+      "html": "<div class=\"ds-tirage\"><div class=\"ds-image\"></div><div class=\"ds-legende\"><p>Vidéo entière · Cinéma Intense</p><div class=\"ds-tampon\"><span class=\"t\">00:09 → 00:35</span><span class=\"d\">27 s · 9:16</span></div></div></div>",
+      "css": ".ds-tirage { display: inline-block; padding: 20px 20px 0; background: hsl(60 23% 98%); box-shadow: 0 1px 0 hsl(211 10% 60%), 0 12px 28px -16px rgba(28,31,36,0.45); font-family: Archivo, system-ui, sans-serif; } .ds-image { width: 180px; height: 320px; background: #000; } .ds-legende { width: 180px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px 0; } .ds-legende p { margin: 0; font-size: 15px; color: hsl(213 9% 33%); } .ds-tampon { margin-left: auto; display: inline-block; padding: 6px 12px; border: 2.5px solid hsl(272 52% 35%); color: hsl(272 52% 35%); line-height: 1.25; opacity: 0.94; transform: rotate(-4deg); font-variant-numeric: tabular-nums; animation: ds-tampon-pose 320ms cubic-bezier(0.16,1,0.3,1) both; } .ds-tampon .t { display: block; font-size: 17px; font-weight: 700; font-stretch: 90%; } .ds-tampon .d { display: block; font-size: 15px; font-weight: 500; } @keyframes ds-tampon-pose { 0% { transform: rotate(-4deg) scale(1.18); opacity: 0; } 55% { transform: rotate(-4deg) scale(0.97); opacity: 1; } 100% { transform: rotate(-4deg) scale(1); opacity: 0.94; } } @media (prefers-reduced-motion: reduce) { .ds-tampon { animation: none; } }"
+    },
+    {
+      "name": "Piste de sélection",
+      "kind": "custom",
+      "description": "Choix du passage : piste de papier de 56 px, plage choisie cadrée de violet avec un voile à 10 %, poignées violettes de 48 px de large.",
+      "html": "<div class=\"ds-piste\"><div class=\"ds-plage\"><span class=\"ds-poignee g\"></span><span class=\"ds-poignee d\"></span></div></div>",
+      "css": ".ds-piste { position: relative; height: 56px; width: 100%; background: hsl(60 23% 98%); border: 1px solid hsl(213 13% 85%); } .ds-plage { position: absolute; top: -1px; bottom: -1px; left: 24%; right: 8%; border: 2px solid hsl(272 52% 35%); background: hsl(272 52% 35% / 0.1); } .ds-poignee { position: absolute; top: 8px; bottom: 8px; width: 6px; background: hsl(272 52% 35%); } .ds-poignee.g { left: 8px; } .ds-poignee.d { right: 8px; }"
+    },
+    {
+      "name": "Barre d'avancement",
+      "kind": "custom",
+      "description": "Envoi, analyse, rendu, série : piste de filet de 6 px, remplissage violet, pourcentage en chiffres tabulaires.",
+      "html": "<div class=\"ds-avance\"><div class=\"ds-avance-tete\"><span>Rendu du clip</span><b>62 %</b></div><div class=\"ds-avance-piste\" role=\"progressbar\" aria-valuenow=\"62\" aria-valuemin=\"0\" aria-valuemax=\"100\"><div style=\"width:62%\"></div></div></div>",
+      "css": ".ds-avance { max-width: 640px; font-family: Archivo, system-ui, sans-serif; color: hsl(216 13% 13%); } .ds-avance-tete { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; font-size: 16px; } .ds-avance-tete b { font-weight: 600; font-variant-numeric: tabular-nums; } .ds-avance-piste { height: 6px; background: hsl(213 13% 85%); } .ds-avance-piste div { height: 100%; background: hsl(272 52% 35%); transition: width 500ms cubic-bezier(0.4,0,0.2,1); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Le tirage de studio",
+    "overview": "ClipFlow se présente comme le comptoir d'un studio photo de quartier. Une barre bleue, de la couleur d'une toile de fond peinte, porte le nom et les quatre étapes en grands mots. Dessous, sur un mur gris-bleu, l'aperçu du clip est posé comme un tirage : bord blanc de papier photo, une seule ombre, et un tampon violet incliné qui porte les temps du passage. Tout le reste est du papier à angles droits, séparé par des filets d'un pixel.\n\nLa densité est celle d'un outil de travail : une colonne de contrôles à droite de l'aperçu, des sections séparées par des filets, des listes en colonnes fixes. La hiérarchie vient de la taille et de la graisse d'Archivo et de sa largeur variable, pas de la couleur ni de la profondeur. La couleur est rare : le bleu pour la barre et l'action qui fait avancer, le violet pour ce qui est choisi et pour les temps, l'encre pour l'option sélectionnée.\n\nLe système refuse l'éditeur vidéo sombre avec sa ligne de temps en bas, et l'interface blanche à boutons bleus arrondis. Il n'utilise ni dégradé, ni halo, ni coin arrondi, ni petite étiquette en capitales.",
+    "keyCharacteristics": [
+      "Angles droits partout (rayon 0), filets d'1 px pour séparer.",
+      "Une seule ombre dans tout le système : celle du tirage.",
+      "Un seul bouton plein (bleu toile) par écran.",
+      "Le violet du tampon marque la sélection, les temps et l'avancement.",
+      "Archivo auto-hébergée, largeur variable : étroite pour les titres, large pour la marque.",
+      "Cibles d'au moins 48 px, texte d'au moins 15 px, chiffres tabulaires pour les temps."
+    ],
+    "rules": [
+      { "name": "La règle du tampon", "body": "Le violet ne sert qu'à ce qui est choisi, à ce qui se mesure en temps, et au focus. Jamais en fond de bouton, jamais en titre, jamais en décor.", "section": "colors" },
+      { "name": "La règle de l'encre pleine", "body": "Une option sélectionnée se marque en aplat d'encre avec texte blanc, pas en bleu : le bleu plein est réservé à l'action qui fait avancer.", "section": "colors" },
+      { "name": "L'exception du rendu", "body": "Les aperçus des styles de sous-titres gardent les vraies couleurs du rendu vidéo (blanc, jaune, vert, contours noirs, capitales du style Impact), posées sur un bandeau d'encre. De même, le fond flou derrière une vidéo verticale imite le rendu FFmpeg. Ces couleurs et effets appartiennent à la vidéo, pas à l'interface ; ils ne sortent jamais de l'aperçu.", "section": "colors" },
+      { "name": "La règle des 15 px", "body": "Aucun texte sous 15 px ; le texte de base est à 16 px.", "section": "typography" },
+      { "name": "La règle des chiffres alignés", "body": "Tout temps, durée, pourcentage ou taille de fichier est en chiffres tabulaires (classe chiffres), pour que les colonnes et les compteurs ne bougent pas.", "section": "typography" },
+      { "name": "La règle des mots, pas des étiquettes", "body": "Pas de petites étiquettes en capitales ni de surtitres : la hiérarchie se fait par la taille, la graisse et la largeur.", "section": "typography" },
+      { "name": "La règle de la zone unique", "body": "Le tirage et la colonne de travail se partagent l'écran ; aucun troisième panneau, aucune barre latérale.", "section": "layout" },
+      { "name": "La règle de l'ombre unique", "body": "Seul le tirage porte une ombre. Panneaux, boutons, champs et menus restent à plat, délimités par un filet.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do garder un seul bouton plein bleu toile par écran ; toutes les autres actions sont à contour ou en lien.",
+      "Do marquer une option choisie par un aplat d'encre et texte blanc.",
+      "Do réserver le violet du tampon à la sélection, aux temps, à l'avancement et au focus.",
+      "Do donner 48 px au moins à toute cible (bouton, option, lien, zone de prise des curseurs).",
+      "Do écrire à 16 px par défaut et jamais sous 15 px ; temps et pourcentages en chiffres tabulaires.",
+      "Do séparer par des filets d'1 px et garder des angles droits.",
+      "Do poser l'aperçu dans le tirage, avec son tampon des temps.",
+      "Do laisser aux aperçus de styles de sous-titres les vraies couleurs du rendu vidéo, sur bandeau d'encre."
+    ],
+    "donts": [
+      "Don't arrondir un coin.",
+      "Don't mettre d'ombre ailleurs que sur le tirage.",
+      "Don't utiliser de dégradé ni de halo.",
+      "Don't ajouter de petites étiquettes en capitales ni de surtitres au-dessus des titres.",
+      "Don't utiliser le violet en fond de bouton ou en décor, ni le bleu toile pour marquer une option choisie.",
+      "Don't ajouter d'icône décorative ; une icône n'apparaît que pour une action (lecture, retour, suivant, chargement, ajout au vocabulaire).",
+      "Don't sortir les couleurs du rendu vidéo (jaune, vert, contours noirs) de l'aperçu des sous-titres."
+    ]
+  }
+}

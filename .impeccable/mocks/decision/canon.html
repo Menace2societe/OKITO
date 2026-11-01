@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>ClipFlow · standard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:900px;overflow:hidden}
+body{font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;background:#141518;color:#E8EAED;display:grid;grid-template-rows:56px 1fr 220px}
+header{display:flex;align-items:center;gap:24px;padding:0 20px;background:#1E2025;border-bottom:1px solid #2A2D33}
+header b{font-size:17px}
+header span{color:#9AA0A6}header span.on{color:#fff;border-bottom:2px solid #3B82F6;padding:16px 0}
+header .ex{margin-left:auto;background:#3B82F6;color:#fff;padding:8px 18px;border-radius:6px;font-weight:600}
+.mid{display:grid;grid-template-columns:320px 1fr 320px}
+.panel{background:#1A1C20;border-right:1px solid #2A2D33;padding:18px;display:flex;flex-direction:column;gap:10px}
+.panel.r{border-right:0;border-left:1px solid #2A2D33}
+.panel h3{font-size:14px;color:#9AA0A6;font-weight:600;margin-bottom:4px}
+.item{background:#23262B;border-radius:8px;padding:12px}.item.on{outline:2px solid #3B82F6}
+.item small{color:#9AA0A6;display:block}
+.stage{display:flex;align-items:center;justify-content:center}
+.vid{width:300px;height:533px;background:#2C3138;border-radius:4px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:60px;position:relative}
+.vid span{background:#000;padding:3px 8px;font-weight:700;font-size:19px}
+.vid em{position:absolute;top:8px;left:8px;font-style:normal;font-size:12px;color:#9AA0A6}
+.tl{background:#1A1C20;border-top:1px solid #2A2D33;padding:16px 20px}
+.ruler{display:flex;justify-content:space-between;color:#9AA0A6;font-size:12px;margin-bottom:10px}
+.track{height:64px;background:#23262B;border-radius:6px;position:relative;margin-bottom:10px}
+.track .s{position:absolute;left:27%;width:16%;top:0;bottom:0;border:2px solid #FACC15;border-radius:6px;background:rgba(250,204,21,.12)}
+.track.a{height:36px;background:repeating-linear-gradient(90deg,#2f3b55 0 3px,#23262B 3px 6px)}
+.chip{display:inline-block;background:#23262B;border-radius:6px;padding:8px 12px;margin-right:6px}
+.chip.on{background:#3B82F6}
+</style></head><body>
+<header><b>ClipFlow</b><span>Import</span><span class="on">Découpe</span><span>Sous-titres</span><span>Export</span><span class="ex">Exporter</span></header>
+<div class="mid">
+  <div class="panel"><h3>Meilleurs moments</h3>
+    <div class="item on">Vos clients paient plus vite…<small>03:29 – 03:46 · 95</small></div>
+    <div class="item">Bonjour et bienvenue à Kinshasa…<small>00:00 – 00:25 · 100</small></div>
+    <div class="item">Le premier conseil, c'est de noter…<small>05:12 – 05:38 · 88</small></div>
+  </div>
+  <div class="stage"><div class="vid"><em>exemple</em><span>Vos clients paient plus vite</span></div></div>
+  <div class="panel r"><h3>Format</h3><div><span class="chip on">9:16</span><span class="chip">1:1</span><span class="chip">16:9</span></div>
+    <h3>Filtre</h3><div><span class="chip on">Cinéma Intense</span><span class="chip">Warm Vlog</span></div>
+    <h3>Durée</h3><div><span class="chip on">15–30 s</span><span class="chip">30–60 s</span><span class="chip">60–90 s</span></div></div>
+</div>
+<div class="tl"><div class="ruler"><span>00:00</span><span>03:00</span><span>06:00</span><span>09:00</span><span>12:47</span></div>
+  <div class="track"><div class="s"></div></div><div class="track a"></div></div>
+</body></html>

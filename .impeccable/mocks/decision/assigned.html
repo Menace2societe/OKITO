@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>ClipFlow · Tirage de studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<style>
+:root{--toile:#2F5D86;--toile-2:#274F73;--papier:#FBFBF8;--encre:#1C1F24;--gris:#5A626C;--filet:#D5DAE0;--fond:#E7EBEF;--tampon:#5B2A86}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:900px;overflow:hidden}
+body{font-family:Archivo,system-ui,sans-serif;font-size:16px;color:var(--encre);background:var(--fond)}
+header{height:96px;background:var(--toile);color:#fff;display:flex;align-items:center;padding:0 40px;gap:48px}
+.marque{font-weight:800;font-size:24px;font-stretch:112%;letter-spacing:-.01em}
+nav{display:flex;gap:36px;align-items:baseline}
+nav a{color:rgba(255,255,255,.62);text-decoration:none;font-size:30px;font-weight:500;font-stretch:88%}
+nav a.fait{color:rgba(255,255,255,.85)}
+nav a.ici{color:#fff;font-weight:800;border-bottom:3px solid #fff;padding-bottom:4px}
+.pc{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:15px}
+.pc i{width:10px;height:10px;border-radius:50%;background:#7FD69B;display:block}
+.fichier{font-size:15px;color:rgba(255,255,255,.8);border-left:1px solid rgba(255,255,255,.3);padding-left:20px}
+main{display:grid;grid-template-columns:470px 1fr;gap:40px;padding:36px 40px 0;height:calc(900px - 96px - 88px)}
+.tirage{background:var(--papier);padding:22px 22px 70px;box-shadow:0 1px 0 #c9cfd6,0 10px 24px -14px rgba(28,31,36,.35);position:relative;width:420px;justify-self:center}
+.image{height:560px;background:#20262d;position:relative;display:flex;align-items:flex-end;justify-content:center;padding-bottom:84px}
+.image .sous{background:#000;color:#fff;font-weight:800;font-size:22px;padding:4px 10px;font-stretch:95%}
+.image .sous b{color:#FFE14D}
+.exemple{position:absolute;top:12px;left:12px;font-size:13px;color:#c9d1da;background:rgba(0,0,0,.4);padding:2px 8px}
+.tampon{position:absolute;right:18px;bottom:14px;transform:rotate(-4deg);border:2.5px solid var(--tampon);color:var(--tampon);padding:6px 12px;font-weight:700;font-size:17px;line-height:1.2;font-stretch:90%;opacity:.92}
+.tampon small{display:block;font-weight:500;font-size:13px}
+.legende{position:absolute;left:22px;bottom:22px;font-size:15px;color:var(--gris)}
+.travail{display:flex;flex-direction:column;gap:26px;min-width:0}
+h1{font-size:34px;font-weight:800;font-stretch:92%;letter-spacing:-.01em}
+.temps{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;font-size:16px;color:var(--gris);margin-bottom:10px}
+.temps b{color:var(--encre)}
+.piste{height:56px;background:var(--papier);border:1px solid var(--filet);position:relative}
+.sel{position:absolute;left:31%;width:18%;top:-1px;bottom:-1px;border:2px solid var(--tampon);background:rgba(91,42,134,.09)}
+.sel:before,.sel:after{content:"";position:absolute;top:10px;bottom:10px;width:6px;background:var(--tampon)}
+.sel:before{left:-4px}.sel:after{right:-4px}
+.outils{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.btn{height:48px;padding:0 20px;font:600 16px Archivo,sans-serif;border:1px solid #9AA4AF;background:var(--papier);color:var(--encre);display:inline-flex;align-items:center}
+.btn.on{border:2px solid var(--encre)}
+.seg{display:flex;border:1px solid #9AA4AF}
+.seg span{height:46px;padding:0 16px;display:flex;align-items:center;font-size:16px;border-right:1px solid var(--filet);background:var(--papier)}
+.seg span:last-child{border-right:0}.seg span.on{background:var(--encre);color:#fff}
+table{width:100%;border-collapse:collapse;background:var(--papier);border:1px solid var(--filet)}
+th{font-size:15px;font-weight:600;color:var(--gris);text-align:left;padding:12px 16px;border-bottom:1px solid var(--filet)}
+td{padding:14px 16px;border-bottom:1px solid var(--filet);font-size:16px;font-variant-numeric:tabular-nums}
+td.n{text-align:right}th.n{text-align:right}
+tr.choisi td{background:rgba(91,42,134,.06)}
+tr.choisi td:first-child{box-shadow:inset 4px 0 0 var(--tampon)}
+.qui{font-size:15px;color:var(--gris)}
+footer{height:88px;display:flex;align-items:center;justify-content:space-between;padding:0 40px;border-top:1px solid var(--filet);background:var(--papier)}
+.retour{font-size:16px;color:var(--encre);text-decoration:underline;text-underline-offset:4px}
+.suivant{height:56px;padding:0 28px;background:var(--toile);color:#fff;font:700 18px Archivo,sans-serif;display:flex;align-items:center;gap:10px}
+</style></head><body>
+<header>
+  <div class="marque">ClipFlow</div>
+  <nav><a class="fait">Importer</a><a class="ici">Découper</a><a>Sous-titrer</a><a>Exporter</a></nav>
+  <div class="pc"><i></i>PC relais allumé</div>
+  <div class="fichier">commerce-kinshasa-ep3.mp4 · 12:47</div>
+</header>
+<main>
+  <div class="tirage">
+    <div class="image"><span class="exemple">exemple</span><span class="sous">Vos clients <b>paient</b> plus vite</span></div>
+    <div class="tampon">03:29 → 03:46<small>17 s · format 9:16</small></div>
+    <div class="legende">Visage suivi · filtre Cinéma Intense</div>
+  </div>
+  <section class="travail">
+    <h1>Choisis le passage</h1>
+    <div>
+      <div class="temps"><span>00:00</span><b>Sélection 03:29 → 03:46 · 17 s</b><span>12:47</span></div>
+      <div class="piste"><div class="sel"></div></div>
+    </div>
+    <div class="outils">
+      <span class="btn on">Meilleurs moments</span><span class="btn">Clip au hasard</span>
+      <div class="seg"><span class="on">15–30 s</span><span>30–60 s</span><span>60–90 s</span></div>
+      <span class="btn">Look au hasard</span>
+    </div>
+    <div>
+      <table>
+        <tr><th>Extrait</th><th>Début – fin</th><th class="n">Durée</th><th class="n">Score</th></tr>
+        <tr class="choisi"><td>Vos clients paient plus vite et vous…</td><td>03:29 – 03:46</td><td class="n">17 s</td><td class="n">95</td></tr>
+        <tr><td>Bonjour et bienvenue à Kinshasa. Aujourd'hui, je…</td><td>00:00 – 00:25</td><td class="n">25 s</td><td class="n">100</td></tr>
+        <tr><td>Le premier conseil, c'est de noter chaque vente…</td><td>05:12 – 05:38</td><td class="n">26 s</td><td class="n">88</td></tr>
+      </table>
+      <p class="qui" style="margin-top:10px">Moments classés par le score local (débit, volume, mots d'accroche). Données d'exemple.</p>
+    </div>
+  </section>
+</main>
+<footer><a class="retour">Retour à l'import</a><span class="suivant">Suivant : sous-titres →</span></footer>
+</body></html>

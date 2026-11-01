@@ -55,3 +55,6 @@ logs/
 
 # Hugging Face Space build output (deploy/hf-backend/build_space.py)
 deploy/hf-backend/dist/
+
+# Impeccable review captures (regenerated)
+.impeccable/review/

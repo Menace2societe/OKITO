@@ -1,10 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { ArrowLeft, ArrowRight, Upload, Scissors, Subtitles, Download, Home } from "lucide-react"
+import { ArrowLeft, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { formatClock } from "@/components/tirage"
+import { usePcStatus } from "@/components/use-pc-status"
 
 import { ImportStep } from "@/components/steps/import-step"
 import { TrimStep } from "@/components/steps/trim-step"
@@ -67,11 +68,17 @@ export interface ProjectState {
 }
 
 const STEPS = [
-  { id: 0, label: "Import", icon: Upload },
-  { id: 1, label: "Trim", icon: Scissors },
-  { id: 2, label: "Subtitles", icon: Subtitles },
-  { id: 3, label: "Export", icon: Download },
+  { id: 0, label: "Importer", next: "découper", back: null },
+  { id: 1, label: "Découper", next: "sous-titrer", back: "Retour à l'import" },
+  { id: 2, label: "Sous-titrer", next: "exporter", back: "Retour au découpage" },
+  { id: 3, label: "Exporter", next: null, back: "Retour aux sous-titres" },
 ]
+
+const PC_LABELS = {
+  online: "PC relais allumé",
+  checking: "Vérification du PC…",
+  offline: "PC relais éteint",
+} as const
 
 const PROCESS_TIMEOUT_MS = 5 * 60 * 1000
 
@@ -112,7 +119,8 @@ const INITIAL_STATE: ProjectState = {
 
 export default function StepWizard() {
   const [currentStep, setCurrentStep] = React.useState(0)
-  
+  const pcStatus = usePcStatus()
+
   const [state, setState] = React.useState<ProjectState>(INITIAL_STATE)
 
   const updateState = (updates: Partial<ProjectState>) => {
@@ -288,13 +296,13 @@ export default function StepWizard() {
       if (!contentType || !contentType.includes("application/json")) {
         const rawText = await res.text()
         console.error("[ClipFlow Export] Réponse brute non-JSON :", rawText)
-        throw new Error("Le serveur a renvoyé une réponse invalide pendant l'export.")
+        throw new Error("Le serveur a renvoyé une réponse illisible pendant l'export. Attends une minute, puis relance le rendu.")
       }
 
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.detail || "Erreur lors du lancement du traitement")
+        throw new Error(data.detail || "Le serveur n'a pas pu lancer le rendu. Vérifie qu'il tourne, puis relance.")
       }
 
       updateState({ jobId: data.job_id })
@@ -312,7 +320,7 @@ export default function StepWizard() {
               srtUrl: downloadUrl(job.srt_url),
             })
           } else if (job.status === "failed") {
-            const errMsg = job.error || "Erreur inconnue lors du traitement"
+            const errMsg = job.error || "Le rendu s'est arrêté sans donner de raison. Relance-le ; si ça recommence, raccourcis le passage."
             console.error("[ClipFlow] Traitement échoué :", errMsg)
             updateState({ jobStatus: "error", errorMessage: errMsg })
           } else {
@@ -329,7 +337,7 @@ export default function StepWizard() {
           ? "Le traitement FFmpeg a dépassé le délai imparti."
           : e instanceof Error
             ? e.message
-            : "Erreur inconnue"
+            : "Le rendu n'a pas pu démarrer. Vérifie la connexion, puis relance."
       updateState({ jobStatus: "error", errorMessage: msg })
     }
   }
@@ -345,61 +353,70 @@ export default function StepWizard() {
     }
   }
 
+  const step = STEPS[currentStep]
+
   return (
-    <Card className="w-full p-6 sm:p-8">
-      {currentStep > 0 && (
-        <div className="mb-4 flex items-start">
-          <button
-            onClick={handleResetToHome}
-            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-            title="Revenir à l'accueil"
-          >
-            <Home className="h-4 w-4" />
-            <span>Accueil</span>
-          </button>
-        </div>
-      )}
+    <div className="flex min-h-screen flex-col">
+      <header className="bg-toile text-white">
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-12 gap-y-3 px-4 py-4 sm:px-10 lg:min-h-24">
+          <p className="text-2xl font-extrabold tracking-[-0.01em] [font-stretch:112%]">ClipFlow</p>
 
-      <div className="mb-8">
-        <div className="relative flex items-center justify-between">
-          <div className="absolute left-0 top-1/2 h-0.5 w-full -translate-y-1/2 bg-muted">
-            <div 
-              className="h-full bg-primary transition-all duration-300" 
-              style={{ width: `${(currentStep / (STEPS.length - 1)) * 100}%` }}
-            />
+          <nav aria-label="Étapes" className="order-last w-full lg:order-none lg:w-auto">
+            <ol className="flex items-baseline gap-9">
+              {STEPS.map((s, idx) => (
+                <li
+                  key={s.id}
+                  aria-current={idx === currentStep ? "step" : undefined}
+                  className={cn(
+                    "text-[30px] leading-tight [font-stretch:88%]",
+                    idx === currentStep
+                      ? "border-b-[3px] border-white pb-1 font-extrabold text-white"
+                      : cn("hidden font-medium lg:block", idx < currentStep ? "text-white/85" : "text-white/65")
+                  )}
+                >
+                  {s.label}
+                  {idx === currentStep && (
+                    <span className="ml-3 text-[15px] font-normal text-white/80 [font-stretch:100%] lg:hidden">
+                      étape {idx + 1} sur {STEPS.length}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </nav>
+
+          <div className="ml-auto flex flex-wrap items-center gap-x-5 gap-y-1 text-[15px]">
+            {pcStatus !== "local" && (
+              <span className="flex items-center gap-2.5">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-2.5 w-2.5 rounded-full",
+                    pcStatus === "online" ? "bg-[#7FD69B]" : pcStatus === "checking" ? "bg-white/50" : "bg-[#F2A49C]"
+                  )}
+                />
+                {PC_LABELS[pcStatus]}
+              </span>
+            )}
+            {state.fileName && (
+              <span className="chiffres max-w-[22rem] truncate text-white/85 sm:border-l sm:border-white/30 sm:pl-5">
+                {state.fileName}
+                {state.duration > 0 && ` · ${formatClock(state.duration)}`}
+              </span>
+            )}
+            {currentStep > 0 && (
+              <button
+                onClick={handleResetToHome}
+                className="min-h-12 text-white underline decoration-white/50 underline-offset-4 hover:decoration-white"
+              >
+                Nouvelle vidéo
+              </button>
+            )}
           </div>
-          {STEPS.map((step, idx) => {
-            const Icon = step.icon
-            const isActive = idx === currentStep
-            const isCompleted = idx < currentStep
-            
-            return (
-              <div key={step.id} className="relative z-10 flex flex-col items-center">
-                <div 
-                  className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-full border-2 transition-colors",
-                    isActive ? "border-primary bg-background text-primary" :
-                    isCompleted ? "border-primary bg-primary text-primary-foreground" :
-                    "border-muted bg-background text-muted-foreground"
-                  )}
-                >
-                  <Icon className="h-5 w-5" />
-                </div>
-                <span 
-                  className={cn(
-                    "absolute -bottom-6 text-xs font-medium",
-                    (isActive || isCompleted) ? "text-foreground" : "text-muted-foreground"
-                  )}
-                >
-                  {step.label}
-                </span>
-              </div>
-            )
-          })}
         </div>
-      </div>
+      </header>
 
-      <div className="mt-12 min-h-[400px]">
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-8 sm:px-10 sm:py-9">
         {currentStep === 0 && (
           <ImportStep
             onFileImported={(fileId, fileName, fileUrl, duration, videoPath) => {
@@ -478,25 +495,30 @@ export default function StepWizard() {
             onFormatChange={(format) => updateState({ outputFormat: format })}
           />
         )}
-      </div>
+      </main>
 
-      <div className="mt-8 flex items-center justify-between border-t pt-6">
-        <Button
-          variant="outline"
-          onClick={handleBack}
-          disabled={currentStep === 0}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Retour
-        </Button>
-        <Button
-          onClick={handleNext}
-          disabled={!isStepValid() || currentStep === STEPS.length - 1}
-        >
-          Suivant
-          <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
-      </div>
-    </Card>
+      <footer className="sticky bottom-0 border-t border-filet bg-papier">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-4 sm:px-10 lg:min-h-[88px]">
+          {step.back ? (
+            <button
+              onClick={handleBack}
+              className="flex min-h-12 items-center gap-2 text-base text-encre underline decoration-filet-fort underline-offset-4 hover:decoration-encre"
+            >
+              <ArrowLeft aria-hidden className="h-4 w-4" />
+              <span className="sm:hidden">Retour</span>
+              <span className="hidden sm:inline">{step.back}</span>
+            </button>
+          ) : (
+            <span />
+          )}
+          {step.next && (
+            <Button size="lg" onClick={handleNext} disabled={!isStepValid()}>
+              Suivant : {step.next}
+              <ArrowRight aria-hidden className="h-5 w-5" />
+            </Button>
+          )}
+        </div>
+      </footer>
+    </div>
   )
 }
