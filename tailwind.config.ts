@@ -6,6 +6,8 @@ const config: Config = {
     "./pages/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
     "./app/**/*.{ts,tsx}",
+    // Subtitle style classes live in lib/presets.ts.
+    "./lib/**/*.{ts,tsx}",
   ],
   theme: {
     container: {
