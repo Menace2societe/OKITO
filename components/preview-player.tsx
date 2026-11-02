@@ -59,6 +59,11 @@ interface PreviewPlayerProps {
   showControls?: boolean
   showPlayButton?: boolean
   caption?: React.ReactNode
+  /** Overrides the default preview size for this aspect ratio. */
+  size?: { width: number; height: number }
+  /** Wraps the video and frameFooter, e.g. a print border. */
+  frameClassName?: string
+  frameFooter?: React.ReactNode
   className?: string
   children?: React.ReactNode
 }
@@ -77,6 +82,9 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
       showControls = true,
       showPlayButton = true,
       caption,
+      size: sizeOverride,
+      frameClassName,
+      frameFooter,
       className,
       children,
     },
@@ -193,13 +201,14 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
       return () => video.removeEventListener("timeupdate", handleTimeUpdate)
     }, [startTime, endTime, onTimeUpdate])
 
-    const size = PREVIEW_SIZES[aspectRatio]
+    const size = sizeOverride ?? PREVIEW_SIZES[aspectRatio]
 
     return (
       <div className={cn("flex flex-col items-center gap-3", className)}>
+        <div className={cn("max-w-full", frameClassName)}>
         <div
           className="relative overflow-hidden rounded-lg bg-black"
-          style={{ width: size.width, height: size.height, maxWidth: "100%" }}
+          style={{ width: size.width, aspectRatio: `${size.width} / ${size.height}`, maxWidth: "100%" }}
         >
           {src && isVertical && (
             <canvas
@@ -237,13 +246,15 @@ export const PreviewPlayer = React.forwardRef<PreviewPlayerHandle, PreviewPlayer
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <p className="text-white text-sm text-center px-4">
+              <p className="px-4 text-center text-[15px] text-white">
                 Aucune vidéo à prévisualiser
               </p>
             </div>
           )}
 
           {children}
+        </div>
+        {frameFooter}
         </div>
 
         {caption}

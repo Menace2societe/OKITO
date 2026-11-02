@@ -18,7 +18,25 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["var(--font-archivo)", "system-ui", "sans-serif"],
+      },
       colors: {
+        toile: {
+          DEFAULT: "hsl(var(--toile) / <alpha-value>)",
+          fonce: "hsl(var(--toile-fonce) / <alpha-value>)",
+        },
+        papier: "hsl(var(--papier) / <alpha-value>)",
+        fond: "hsl(var(--fond) / <alpha-value>)",
+        encre: "hsl(var(--encre) / <alpha-value>)",
+        gris: "hsl(var(--gris) / <alpha-value>)",
+        filet: {
+          DEFAULT: "hsl(var(--filet) / <alpha-value>)",
+          fort: "hsl(var(--filet-fort) / <alpha-value>)",
+        },
+        tampon: "hsl(var(--tampon) / <alpha-value>)",
+        erreur: "hsl(var(--erreur) / <alpha-value>)",
+        ok: "hsl(var(--ok) / <alpha-value>)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

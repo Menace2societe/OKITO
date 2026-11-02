@@ -32,12 +32,12 @@ export function pollJob<T>(
     networkFailures = 0
     try {
       const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || "Erreur serveur")
+      if (!res.ok) throw new Error(data.detail || `Le serveur a répondu par une erreur (${res.status}). Attends une minute, puis réessaie.`)
       if (stopped) return
       onUpdate(data)
       if (!isDone(data)) timer = setTimeout(tick, intervalMs)
     } catch (e) {
-      if (!stopped) onError(e instanceof Error ? e.message : "Réponse invalide du serveur")
+      if (!stopped) onError(e instanceof Error ? e.message : "Le serveur a renvoyé une réponse illisible. Attends une minute, puis réessaie.")
     }
   }
   void tick()
@@ -56,6 +56,6 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.detail || "Erreur serveur")
+  if (!res.ok) throw new Error(data.detail || `Le serveur a répondu par une erreur (${res.status}). Attends une minute, puis réessaie.`)
   return data as T
 }
