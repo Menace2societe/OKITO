@@ -358,7 +358,7 @@ export default function StepWizard() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="bg-toile text-white">
-        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-12 gap-y-3 px-4 py-4 sm:px-10 lg:min-h-24">
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-10 gap-y-3 px-4 py-4 sm:px-10 lg:min-h-24">
           <p className="text-2xl font-extrabold tracking-[-0.01em] [font-stretch:112%]">ClipFlow</p>
 
           <nav aria-label="Étapes" className="order-last w-full lg:order-none lg:w-auto">
@@ -399,7 +399,7 @@ export default function StepWizard() {
               </span>
             )}
             {state.fileName && (
-              <span className="chiffres max-w-[22rem] truncate text-white/85 sm:border-l sm:border-white/30 sm:pl-5">
+              <span className="chiffres max-w-[22rem] truncate text-white/85 sm:border-l sm:border-white/30 sm:pl-5 lg:hidden min-[1400px]:inline">
                 {state.fileName}
                 {state.duration > 0 && ` · ${formatClock(state.duration)}`}
               </span>
